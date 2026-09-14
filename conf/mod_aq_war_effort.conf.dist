@@ -30,37 +30,37 @@ AQWarEffort.Id = 1
 #                     These are item quantities, NOT visual progression stages.
 #
 
-AQWarEffort.Goal.Horde.Bandages.01 = 20
-AQWarEffort.Goal.Horde.Bandages.02 = 40
-AQWarEffort.Goal.Horde.Bandages.03 = 60
-AQWarEffort.Goal.Horde.Food.01 = 20
-AQWarEffort.Goal.Horde.Food.02 = 40
-AQWarEffort.Goal.Horde.Food.03 = 60
-AQWarEffort.Goal.Horde.Herbs.01 = 20
-AQWarEffort.Goal.Horde.Herbs.02 = 40
-AQWarEffort.Goal.Horde.Herbs.03 = 60
-AQWarEffort.Goal.Horde.Metal.01 = 20
-AQWarEffort.Goal.Horde.Metal.02 = 40
-AQWarEffort.Goal.Horde.Metal.03 = 60
-AQWarEffort.Goal.Horde.Leather.01 = 10
-AQWarEffort.Goal.Horde.Leather.02 = 20
-AQWarEffort.Goal.Horde.Leather.03 = 30
+AQWarEffort.Goal.Horde.Bandages.01 = 2000
+AQWarEffort.Goal.Horde.Bandages.02 = 4000
+AQWarEffort.Goal.Horde.Bandages.03 = 6000
+AQWarEffort.Goal.Horde.Food.01 = 2000
+AQWarEffort.Goal.Horde.Food.02 = 4000
+AQWarEffort.Goal.Horde.Food.03 = 6000
+AQWarEffort.Goal.Horde.Herbs.01 = 2000
+AQWarEffort.Goal.Horde.Herbs.02 = 4000
+AQWarEffort.Goal.Horde.Herbs.03 = 6000
+AQWarEffort.Goal.Horde.Metal.01 = 2000
+AQWarEffort.Goal.Horde.Metal.02 = 4000
+AQWarEffort.Goal.Horde.Metal.03 = 6000
+AQWarEffort.Goal.Horde.Leather.01 = 1000
+AQWarEffort.Goal.Horde.Leather.02 = 2000
+AQWarEffort.Goal.Horde.Leather.03 = 3000
 
-AQWarEffort.Goal.Alliance.Bandages.01 = 20
-AQWarEffort.Goal.Alliance.Bandages.02 = 40
-AQWarEffort.Goal.Alliance.Bandages.03 = 60
-AQWarEffort.Goal.Alliance.Food.01 = 20
-AQWarEffort.Goal.Alliance.Food.02 = 40
-AQWarEffort.Goal.Alliance.Food.03 = 60
-AQWarEffort.Goal.Alliance.Herbs.01 = 20
-AQWarEffort.Goal.Alliance.Herbs.02 = 40
-AQWarEffort.Goal.Alliance.Herbs.03 = 60
-AQWarEffort.Goal.Alliance.Metal.01 = 20
-AQWarEffort.Goal.Alliance.Metal.02 = 40
-AQWarEffort.Goal.Alliance.Metal.03 = 60
-AQWarEffort.Goal.Alliance.Leather.01 = 10
-AQWarEffort.Goal.Alliance.Leather.02 = 20
-AQWarEffort.Goal.Alliance.Leather.03 = 30
+AQWarEffort.Goal.Alliance.Bandages.01 = 2000
+AQWarEffort.Goal.Alliance.Bandages.02 = 4000
+AQWarEffort.Goal.Alliance.Bandages.03 = 6000
+AQWarEffort.Goal.Alliance.Food.01 = 2000
+AQWarEffort.Goal.Alliance.Food.02 = 4000
+AQWarEffort.Goal.Alliance.Food.03 = 6000
+AQWarEffort.Goal.Alliance.Herbs.01 = 2000
+AQWarEffort.Goal.Alliance.Herbs.02 = 4000
+AQWarEffort.Goal.Alliance.Herbs.03 = 6000
+AQWarEffort.Goal.Alliance.Metal.01 = 2000
+AQWarEffort.Goal.Alliance.Metal.02 = 4000
+AQWarEffort.Goal.Alliance.Metal.03 = 6000
+AQWarEffort.Goal.Alliance.Leather.01 = 1000
+AQWarEffort.Goal.Alliance.Leather.02 = 2000
+AQWarEffort.Goal.Alliance.Leather.03 = 3000
 
 # All settings are loaded at startup; restart after editing.
 # Each goal must be at least one full turn-in and an exact multiple of its quantity.
