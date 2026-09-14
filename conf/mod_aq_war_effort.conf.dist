@@ -1,0 +1,67 @@
+#
+# Copyright (C) 2016+ AzerothCore <www.azerothcore.org>, released under GNU AGPL v3 license: https://github.com/azerothcore/azerothcore-wotlk/blob/master/LICENSE-AGPL3
+#
+
+[worldserver]
+
+########################################
+# mod-aq-war-effort configuration
+########################################
+#
+#    AQWarEffort.Enable
+#        Description: Enables contribution tracking and quartermaster reports (restart required)
+#        Default:     0 - Disabled
+#                     1 - Enabled
+#
+
+AQWarEffort.Enable = 0
+
+#
+#    AQWarEffort.Id
+#        Description: Campaign ID. Each ID has independent persistent totals/state (restart required).
+#        Default:     1
+#
+
+AQWarEffort.Id = 1
+
+#
+#    AQWarEffort.Goal.Faction.XXX
+#        Description: Per-material goals: .01, .02 and .03 select the three materials in each category.
+#                     These are item quantities, NOT visual progression stages.
+#
+
+AQWarEffort.Goal.Horde.Bandages.01 = 5
+AQWarEffort.Goal.Horde.Bandages.02 = 10
+AQWarEffort.Goal.Horde.Bandages.03 = 15
+AQWarEffort.Goal.Horde.Food.01 = 5
+AQWarEffort.Goal.Horde.Food.02 = 10
+AQWarEffort.Goal.Horde.Food.03 = 15
+AQWarEffort.Goal.Horde.Herbs.01 = 5
+AQWarEffort.Goal.Horde.Herbs.02 = 10
+AQWarEffort.Goal.Horde.Herbs.03 = 15
+AQWarEffort.Goal.Horde.Metal.01 = 5
+AQWarEffort.Goal.Horde.Metal.02 = 10
+AQWarEffort.Goal.Horde.Metal.03 = 15
+AQWarEffort.Goal.Horde.Leather.01 = 5
+AQWarEffort.Goal.Horde.Leather.02 = 10
+AQWarEffort.Goal.Horde.Leather.03 = 15
+
+AQWarEffort.Goal.Alliance.Bandages.01 = 5
+AQWarEffort.Goal.Alliance.Bandages.02 = 10
+AQWarEffort.Goal.Alliance.Bandages.03 = 15
+AQWarEffort.Goal.Alliance.Food.01 = 5
+AQWarEffort.Goal.Alliance.Food.02 = 10
+AQWarEffort.Goal.Alliance.Food.03 = 15
+AQWarEffort.Goal.Alliance.Herbs.01 = 5
+AQWarEffort.Goal.Alliance.Herbs.02 = 10
+AQWarEffort.Goal.Alliance.Herbs.03 = 15
+AQWarEffort.Goal.Alliance.Metal.01 = 5
+AQWarEffort.Goal.Alliance.Metal.02 = 10
+AQWarEffort.Goal.Alliance.Metal.03 = 15
+AQWarEffort.Goal.Alliance.Leather.01 = 5
+AQWarEffort.Goal.Alliance.Leather.02 = 10
+AQWarEffort.Goal.Alliance.Leather.03 = 15
+
+# All settings are loaded at startup; restart after editing.
+# Supplied goals 5/10/15 are small testing values inherited from this scaffold.
+# Configure production goals before enabling. Only WAR_EFFORT accepts contributions.
