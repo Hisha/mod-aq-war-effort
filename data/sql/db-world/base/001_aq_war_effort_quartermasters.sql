@@ -18,7 +18,7 @@ WHERE gec.`eventEntry` = 22
   AND (ca.`path_id` IS NULL OR ca.`path_id` = 0);
 
 -- Stock Horde War Effort quest 8610 "The Horde Needs More Runecloth Bandages!" is missing its repeatable flag.
-UPDATE `quest_template`
+UPDATE `quest_template_addon`
 SET `SpecialFlags` = `SpecialFlags` | 1
 WHERE `ID` = 8610
   AND (`SpecialFlags` & 1) = 0;
