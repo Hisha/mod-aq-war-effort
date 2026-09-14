@@ -12,6 +12,7 @@
 #include <string>
 
 class Player;
+class Quest;
 
 enum AQCampaignPhase : uint8
 {
@@ -46,7 +47,8 @@ namespace AQWarEffort
         uint32 Quest;
         uint32 RepeatQuest;
         MaterialCategory Category;
-        uint8 Multiplier;
+        uint32 ItemId;
+        uint32 TurnInQuantity;
         char const* GoalKey;
     };
 
@@ -56,7 +58,7 @@ namespace AQWarEffort
         uint64 PhaseStartedAt{ 0 };
         uint64 GongRungAt{ 0 };
         uint64 OpenedAt{ 0 };
-        // Stored as number of quest turn-ins, not item quantities.
+        // Stored as actual contributed material quantities (data version 2).
         std::array<std::array<uint64, MaterialCount>, FactionCount> Contributions{};
         bool operator==(Campaign const&) const = default;
     };
@@ -76,15 +78,20 @@ namespace AQWarEffort
         bool IsComplete() const;
         std::string Scores(uint8 faction, uint8 category = MATERIAL_CAT_COUNT) const;
         bool SetPhase(AQCampaignPhase phase);
-        void OnQuestReward(Player* player, uint32 questId);
+        void OnQuestReward(Player* player, Quest const* quest);
+        void SyncCollectionEvent();
 
     private:
         Manager() = default;
+        bool ValidateConfiguration();
+        static bool ValidateQuest(Material const& material, Quest const* quest);
         bool ReadCampaign(Campaign& campaign) const;
         bool Persist(Campaign const& next);
         bool IsComplete(Campaign const& campaign, uint8 faction) const;
         static void EnterPhase(Campaign& campaign, AQCampaignPhase phase);
 
+        bool _initialized{ false };
+        bool _syncingEvent{ false };
         bool _enabled{ false };
         bool _loaded{ false };
         uint32 _id{ 1 };

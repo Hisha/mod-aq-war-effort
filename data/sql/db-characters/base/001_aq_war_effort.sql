@@ -1,3 +1,20 @@
+-- mod-aq-war-effort: fresh schema uses MATERIAL QUANTITIES (data version 2).
+-- On an existing unversioned table, record version 1 WITHOUT relabeling its counters.
+-- Existing installs must also apply updates/2026_09_14_00_material_quantities.sql.
+-- Stop worldserver before applying base or update SQL.
+CREATE TABLE IF NOT EXISTS `aq_war_effort_schema` (
+    `id` TINYINT UNSIGNED NOT NULL,
+    `material_data_version` INT UNSIGNED NOT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO `aq_war_effort_schema` (`id`, `material_data_version`)
+SELECT 1, IF(EXISTS (
+    SELECT 1 FROM `information_schema`.`tables`
+    WHERE `table_schema` = DATABASE() AND `table_name` = 'aq_war_effort'
+), 1, 2)
+ON DUPLICATE KEY UPDATE `id` = `id`;
+
 -- mod-aq-war-effort: non-destructive canonical character schema.
 -- Runtime initializes both faction rows and the campaign row for the configured ID.
 CREATE TABLE IF NOT EXISTS `aq_war_effort` (

@@ -12,11 +12,15 @@
 #include "CreatureScript.h"
 #include "DatabaseEnv.h"
 #include "Log.h"
+#include "GameEventMgr.h"
+#include "GameEventScript.h"
+#include "ObjectMgr.h"
 #include "Player.h"
 #include "PlayerScript.h"
 #include "QuestDef.h"
 #include "ScriptedGossip.h"
 #include "WorldScript.h"
+#include <charconv>
 #include <ctime>
 #include <limits>
 #include <sstream>
@@ -25,70 +29,74 @@ namespace AQWarEffort
 {
 namespace
 {
+    constexpr uint16 CollectionEvent = 22;
+    constexpr uint32 MaterialDataVersion = 2;
+
+    // Audited against stock quest_template and validated against loaded quests at startup.
     Material const Materials[FactionCount][MaterialCount] =
     {
         {
-            { "Linen Bandages", 8517, 8518, MATERIAL_CAT_BANDAGES, 20,
+            { "Linen Bandages", 8517, 8518, MATERIAL_CAT_BANDAGES, 1251, 20,
                 "AQWarEffort.Goal.Alliance.Bandages.01" },
-            { "Silk Bandages", 8520, 8521, MATERIAL_CAT_BANDAGES, 20,
+            { "Silk Bandages", 8520, 8521, MATERIAL_CAT_BANDAGES, 6450, 20,
                 "AQWarEffort.Goal.Alliance.Bandages.02" },
-            { "Runecloth Bandages", 8522, 8523, MATERIAL_CAT_BANDAGES, 20,
+            { "Runecloth Bandages", 8522, 8523, MATERIAL_CAT_BANDAGES, 14529, 20,
                 "AQWarEffort.Goal.Alliance.Bandages.03" },
-            { "Rainbow Fin Albacore", 8524, 8525, MATERIAL_CAT_FOOD, 20,
+            { "Rainbow Fin Albacore", 8524, 8525, MATERIAL_CAT_FOOD, 5095, 20,
                 "AQWarEffort.Goal.Alliance.Food.01" },
-            { "Roast Raptor", 8526, 8527, MATERIAL_CAT_FOOD, 20,
+            { "Roast Raptor", 8526, 8527, MATERIAL_CAT_FOOD, 12210, 20,
                 "AQWarEffort.Goal.Alliance.Food.02" },
-            { "Spotted Yellowtail", 8528, 8529, MATERIAL_CAT_FOOD, 20,
+            { "Spotted Yellowtail", 8528, 8529, MATERIAL_CAT_FOOD, 6887, 20,
                 "AQWarEffort.Goal.Alliance.Food.03" },
-            { "Stranglekelp", 8503, 8504, MATERIAL_CAT_HERBS, 20,
+            { "Stranglekelp", 8503, 8504, MATERIAL_CAT_HERBS, 3820, 20,
                 "AQWarEffort.Goal.Alliance.Herbs.01" },
-            { "Arthas' Tears", 8509, 8510, MATERIAL_CAT_HERBS, 20,
+            { "Arthas' Tears", 8509, 8510, MATERIAL_CAT_HERBS, 8836, 20,
                 "AQWarEffort.Goal.Alliance.Herbs.02" },
-            { "Purple Lotus", 8505, 8506, MATERIAL_CAT_HERBS, 20,
+            { "Purple Lotus", 8505, 8506, MATERIAL_CAT_HERBS, 8831, 20,
                 "AQWarEffort.Goal.Alliance.Herbs.03" },
-            { "Iron Bars", 8494, 8495, MATERIAL_CAT_METAL, 20,
+            { "Iron Bars", 8494, 8495, MATERIAL_CAT_METAL, 3575, 20,
                 "AQWarEffort.Goal.Alliance.Metal.01" },
-            { "Thorium Bars", 8499, 8500, MATERIAL_CAT_METAL, 20,
+            { "Thorium Bars", 8499, 8500, MATERIAL_CAT_METAL, 12359, 20,
                 "AQWarEffort.Goal.Alliance.Metal.02" },
-            { "Copper Bars", 8492, 8493, MATERIAL_CAT_METAL, 20,
+            { "Copper Bars", 8492, 8493, MATERIAL_CAT_METAL, 2840, 20,
                 "AQWarEffort.Goal.Alliance.Metal.03" },
-            { "Light Leather", 8511, 8512, MATERIAL_CAT_LEATHER, 10,
+            { "Light Leather", 8511, 8512, MATERIAL_CAT_LEATHER, 2318, 10,
                 "AQWarEffort.Goal.Alliance.Leather.01" },
-            { "Medium Leather", 8513, 8514, MATERIAL_CAT_LEATHER, 10,
+            { "Medium Leather", 8513, 8514, MATERIAL_CAT_LEATHER, 2319, 10,
                 "AQWarEffort.Goal.Alliance.Leather.02" },
-            { "Thick Leather", 8515, 8516, MATERIAL_CAT_LEATHER, 10,
+            { "Thick Leather", 8515, 8516, MATERIAL_CAT_LEATHER, 4304, 10,
                 "AQWarEffort.Goal.Alliance.Leather.03" },
         },
         {
-            { "Wool Bandages", 8604, 8605, MATERIAL_CAT_BANDAGES, 20,
+            { "Wool Bandages", 8604, 8605, MATERIAL_CAT_BANDAGES, 3530, 20,
                 "AQWarEffort.Goal.Horde.Bandages.01" },
-            { "Mageweave Bandages", 8607, 8608, MATERIAL_CAT_BANDAGES, 20,
+            { "Mageweave Bandages", 8607, 8608, MATERIAL_CAT_BANDAGES, 8544, 20,
                 "AQWarEffort.Goal.Horde.Bandages.02" },
-            { "Runecloth Bandages", 8609, 8610, MATERIAL_CAT_BANDAGES, 20,
+            { "Runecloth Bandages", 8609, 8610, MATERIAL_CAT_BANDAGES, 14529, 20,
                 "AQWarEffort.Goal.Horde.Bandages.03" },
-            { "Lean Wolf Steaks", 8611, 8612, MATERIAL_CAT_FOOD, 20,
+            { "Lean Wolf Steaks", 8611, 8612, MATERIAL_CAT_FOOD, 12209, 20,
                 "AQWarEffort.Goal.Horde.Food.01" },
-            { "Baked Salmon", 8615, 8616, MATERIAL_CAT_FOOD, 20,
+            { "Baked Salmon", 8615, 8616, MATERIAL_CAT_FOOD, 13935, 20,
                 "AQWarEffort.Goal.Horde.Food.02" },
-            { "Spotted Yellowtail", 8613, 8614, MATERIAL_CAT_FOOD, 20,
+            { "Spotted Yellowtail", 8613, 8614, MATERIAL_CAT_FOOD, 6887, 20,
                 "AQWarEffort.Goal.Horde.Food.03" },
-            { "Peacebloom", 8549, 8550, MATERIAL_CAT_HERBS, 20,
+            { "Peacebloom", 8549, 8550, MATERIAL_CAT_HERBS, 2447, 20,
                 "AQWarEffort.Goal.Horde.Herbs.01" },
-            { "Firebloom", 8580, 8581, MATERIAL_CAT_HERBS, 20,
+            { "Firebloom", 8580, 8581, MATERIAL_CAT_HERBS, 4625, 20,
                 "AQWarEffort.Goal.Horde.Herbs.02" },
-            { "Purple Lotus", 8582, 8583, MATERIAL_CAT_HERBS, 20,
+            { "Purple Lotus", 8582, 8583, MATERIAL_CAT_HERBS, 8831, 20,
                 "AQWarEffort.Goal.Horde.Herbs.03" },
-            { "Tin Bars", 8542, 8543, MATERIAL_CAT_METAL, 20,
+            { "Tin Bars", 8542, 8543, MATERIAL_CAT_METAL, 3576, 20,
                 "AQWarEffort.Goal.Horde.Metal.01" },
-            { "Mithril Bars", 8545, 8546, MATERIAL_CAT_METAL, 20,
+            { "Mithril Bars", 8545, 8546, MATERIAL_CAT_METAL, 3860, 20,
                 "AQWarEffort.Goal.Horde.Metal.02" },
-            { "Copper Bars", 8532, 8533, MATERIAL_CAT_METAL, 20,
+            { "Copper Bars", 8532, 8533, MATERIAL_CAT_METAL, 2840, 20,
                 "AQWarEffort.Goal.Horde.Metal.03" },
-            { "Heavy Leather", 8588, 8589, MATERIAL_CAT_LEATHER, 10,
+            { "Heavy Leather", 8588, 8589, MATERIAL_CAT_LEATHER, 4234, 10,
                 "AQWarEffort.Goal.Horde.Leather.01" },
-            { "Rugged Leather", 8600, 8601, MATERIAL_CAT_LEATHER, 10,
+            { "Rugged Leather", 8600, 8601, MATERIAL_CAT_LEATHER, 8170, 10,
                 "AQWarEffort.Goal.Horde.Leather.02" },
-            { "Thick Leather", 8590, 8591, MATERIAL_CAT_LEATHER, 10,
+            { "Thick Leather", 8590, 8591, MATERIAL_CAT_LEATHER, 4304, 10,
                 "AQWarEffort.Goal.Horde.Leather.03" },
         },
     };
@@ -118,14 +126,108 @@ Material const& Manager::GetMaterial(uint8 faction, uint8 material)
     return Materials[faction][material];
 }
 
+bool Manager::ValidateQuest(Material const& material, Quest const* quest)
+{
+    uint32 quantity = 0;
+    bool valid = quest != nullptr;
+    if (quest)
+    {
+        for (uint8 i = 0; i < QUEST_ITEM_OBJECTIVES_COUNT; ++i)
+        {
+            if (!quest->RequiredItemId[i] && !quest->RequiredItemCount[i])
+                continue;
+            if (quest->RequiredItemId[i] != material.ItemId)
+                valid = false;
+            quantity += quest->RequiredItemCount[i];
+        }
+    }
+    if (!valid || quantity != material.TurnInQuantity)
+    {
+        LOG_ERROR("module", "AQWarEffort: Invalid quest data for {} (quest {}): expected item {} x{}, found quantity {}. Check both quests {}/{}.",
+            material.Name, quest ? quest->GetQuestId() : 0, material.ItemId, material.TurnInQuantity,
+            quantity, material.Quest, material.RepeatQuest);
+        return false;
+    }
+    return true;
+}
+
+bool Manager::ValidateConfiguration()
+{
+    bool valid = true;
+    for (std::string const& key : sConfigMgr->GetKeysByString("AQWarEffort.Goal."))
+    {
+        bool known = false;
+        for (auto const& faction : Materials)
+            for (Material const& material : faction)
+                if (key == material.GoalKey)
+                    known = true;
+        if (!known)
+        {
+            LOG_ERROR("module", "AQWarEffort: Unknown goal key {}. Use the .conf.dist category keys (.01/.02/.03).", key);
+            valid = false;
+        }
+    }
+    for (uint8 faction = 0; faction < FactionCount; ++faction)
+    {
+        for (uint8 i = 0; i < MaterialCount; ++i)
+        {
+            Material const& material = Materials[faction][i];
+            std::string configured = sConfigMgr->GetOption<std::string>(material.GoalKey,
+                std::to_string((i % 3 + 1) * material.TurnInQuantity));
+            uint64 goal = 0;
+            auto parsed = std::from_chars(configured.data(), configured.data() + configured.size(), goal);
+            _goals[faction][i] = goal;
+            if (parsed.ec != std::errc() || parsed.ptr != configured.data() + configured.size()
+                || goal < material.TurnInQuantity || goal % material.TurnInQuantity != 0)
+            {
+                LOG_ERROR("module", "AQWarEffort: Invalid {} {} goal {} ({}): must be at least {} and a multiple of {}.",
+                    faction == TEAM_ALLIANCE ? "Alliance" : "Horde", material.Name, configured,
+                    material.GoalKey, material.TurnInQuantity, material.TurnInQuantity);
+                valid = false;
+            }
+            // Evaluate every entry so administrators see all problems in one startup.
+            if (!ValidateQuest(material, sObjectMgr->GetQuestTemplate(material.Quest)))
+                valid = false;
+            if (!ValidateQuest(material, sObjectMgr->GetQuestTemplate(material.RepeatQuest)))
+                valid = false;
+        }
+    }
+    return valid;
+}
+
+void Manager::SyncCollectionEvent()
+{
+    if (!_initialized || !_enabled || _syncingEvent)
+        return;
+    auto const& events = sGameEventMgr->GetEventMap();
+    if (CollectionEvent >= events.size() || !events[CollectionEvent].isValid())
+    {
+        LOG_ERROR("module", "AQWarEffort: Required collection game event 22 is missing or invalid.");
+        return;
+    }
+    // Invalid configuration/data must not expose collectors while progress cannot be saved.
+    bool desired = _loaded && _campaign.Phase == AQ_PHASE_WAR_EFFORT;
+    if (sGameEventMgr->IsActiveEvent(CollectionEvent) == desired)
+        return;
+    _syncingEvent = true;
+    // overwrite=false preserves configured dates, including in-memory schedule dates.
+    if (desired)
+        sGameEventMgr->StartEvent(CollectionEvent, false);
+    else
+        sGameEventMgr->StopEvent(CollectionEvent, false);
+    _syncingEvent = false;
+    if (sGameEventMgr->IsActiveEvent(CollectionEvent) == desired)
+        LOG_INFO("module", "AQWarEffort: Game event 22 {} for campaign ID {}, phase {}{}.",
+            desired ? "started" : "stopped", _id, PhaseName(_campaign.Phase), _loaded ? "" : " (tracking unavailable)");
+    else
+        LOG_ERROR("module", "AQWarEffort: Could not synchronize game event 22 for campaign ID {}; check event disable settings.", _id);
+}
+
 bool Manager::IsComplete(Campaign const& campaign, uint8 faction) const
 {
     for (uint8 i = 0; i < MaterialCount; ++i)
     {
-        // Compare turn-ins with a ceiling division, avoiding multiplication overflow.
-        uint64 multiplier = Materials[faction][i].Multiplier;
-        uint64 required = _goals[faction][i] / multiplier + (_goals[faction][i] % multiplier != 0);
-        if (campaign.Contributions[faction][i] < required)
+        if (campaign.Contributions[faction][i] < _goals[faction][i])
             return false;
     }
     return true;
@@ -146,9 +248,20 @@ void Manager::Initialize()
     _loaded = false;
     _enabled = sConfigMgr->GetOption<bool>("AQWarEffort.Enable", false);
     _id = sConfigMgr->GetOption<uint32>("AQWarEffort.Id", 1);
-    for (uint8 faction = 0; faction < FactionCount; ++faction)
-        for (uint8 i = 0; i < MaterialCount; ++i)
-            _goals[faction][i] = sConfigMgr->GetOption<uint32>(Materials[faction][i].GoalKey, (i % 3 + 1) * 5);
+    _initialized = true;
+    if (!ValidateConfiguration())
+    {
+        LOG_ERROR("module", "AQWarEffort: Invalid goals or quest data; no campaign data changed. Tracking disabled until restart.");
+        SyncCollectionEvent();
+        return;
+    }
+    QueryResult version = CharacterDatabase.Query("SELECT material_data_version FROM aq_war_effort_schema WHERE id = 1");
+    if (!version || (*version)[0].Get<uint32>() != MaterialDataVersion)
+    {
+        LOG_ERROR("module", "AQWarEffort: Material data version 2 required. Stop worldserver and apply the character update SQL.");
+        SyncCollectionEvent();
+        return;
+    }
 
     // Initialize only absent rows; disabled configuration does not rewrite persistent state.
     CharacterDatabase.DirectExecute("INSERT INTO aq_war_effort (id, faction) VALUES ({}, 0), ({}, 1) "
@@ -162,6 +275,7 @@ void Manager::Initialize()
     if (!materials || materials->GetRowCount() != FactionCount)
     {
         LOG_ERROR("module", "AQWarEffort: Cannot load supplies for ID {}; apply the character schema and restart.", _id);
+        SyncCollectionEvent();
         return;
     }
     do
@@ -178,11 +292,13 @@ void Manager::Initialize()
     if (!ReadCampaign(_campaign))
     {
         LOG_ERROR("module", "AQWarEffort: Cannot load campaign ID {}. Check schema, phase and counters; tracking disabled.", _id);
+        SyncCollectionEvent();
         return;
     }
     _loaded = true;
     LOG_INFO("module", "AQWarEffort: Loaded campaign ID {}, phase {}, tracking {}", _id,
         PhaseName(_campaign.Phase), _enabled ? "enabled" : "disabled");
+    SyncCollectionEvent();
 }
 
 bool Manager::ReadCampaign(Campaign& campaign) const
@@ -206,8 +322,6 @@ bool Manager::ReadCampaign(Campaign& campaign) const
         for (uint8 i = 0; i < MaterialCount; ++i)
         {
             uint64 count = (*result)[i + 5].Get<uint64>();
-            if (count > std::numeric_limits<uint64>::max() / Materials[faction][i].Multiplier)
-                return false;
             campaign.Contributions[faction][i] = count;
         }
     } while (result->NextRow());
@@ -249,12 +363,14 @@ bool Manager::Persist(Campaign const& next)
     {
         _loaded = false;
         LOG_ERROR("module", "AQWarEffort: Campaign ID {} write could not be verified. Tracking stopped; inspect DB and restart.", _id);
+        SyncCollectionEvent();
         return false;
     }
     if (_campaign.Phase != next.Phase)
         LOG_INFO("module", "AQWarEffort: Campaign ID {} transitioned {} -> {}", _id,
             PhaseName(_campaign.Phase), PhaseName(next.Phase));
     _campaign = next;
+    SyncCollectionEvent();
     return true;
 }
 
@@ -263,49 +379,72 @@ bool Manager::SetPhase(AQCampaignPhase phase)
     if (!_loaded || phase > AQ_PHASE_OPEN)
         return false;
     if (phase == _campaign.Phase)
+    {
+        SyncCollectionEvent();
         return true;
+    }
     Campaign next = _campaign;
     EnterPhase(next, phase);
     return Persist(next);
 }
 
-void Manager::OnQuestReward(Player* player, uint32 questId)
+void Manager::OnQuestReward(Player* player, Quest const* quest)
 {
-    if (!_enabled || !_loaded)
-        return;
+    uint32 questId = quest->GetQuestId();
     if (questId == QuestBangGong)
     {
-        LOG_INFO("module", "AQWarEffort: Quest 8743 rewarded in campaign ID {}, phase {}. Gong lifecycle is not implemented.",
-            _id, PhaseName(_campaign.Phase));
+        if (_enabled && _loaded)
+            LOG_INFO("module", "AQWarEffort: Quest 8743 rewarded in campaign ID {}, phase {}. Gong lifecycle is not implemented.",
+                _id, PhaseName(_campaign.Phase));
         return;
     }
-    if (_campaign.Phase != AQ_PHASE_WAR_EFFORT || player->GetTeamId() >= FactionCount)
-        return;
-    uint8 faction = player->GetTeamId();
-    for (uint8 i = 0; i < MaterialCount; ++i)
+    // Classify by the rewarded quest, not the player's current faction (e.g. cross-faction play).
+    for (uint8 faction = 0; faction < FactionCount; ++faction)
     {
-        Material const& material = Materials[faction][i];
-        if (questId != material.Quest && questId != material.RepeatQuest)
-            continue;
-        Campaign next = _campaign;
-        if (next.Contributions[faction][i] >= std::numeric_limits<uint64>::max() / material.Multiplier)
+        for (uint8 i = 0; i < MaterialCount; ++i)
         {
-            LOG_ERROR("module", "AQWarEffort: Counter overflow rejected for campaign ID {}, faction {}, material {}.",
-                _id, uint32(faction), uint32(i));
+            Material const& material = Materials[faction][i];
+            if (questId != material.Quest && questId != material.RepeatQuest)
+                continue;
+            char const* reason = !_enabled ? "AQWarEffort.Enable is disabled"
+                : !_loaded ? "campaign unavailable; check startup/database errors"
+                : _campaign.Phase != AQ_PHASE_WAR_EFFORT ? "campaign is not in WAR_EFFORT" : nullptr;
+            if (reason)
+            {
+                LOG_WARN("module", "AQWarEffort: Quest {} ({}) not counted for campaign ID {}: {}", questId, material.Name, _id, reason);
+                ChatHandler(player->GetSession()).PSendSysMessage("AQ War Effort contribution not counted: {}.", reason);
+                return;
+            }
+            if (!ValidateQuest(material, quest))
+            {
+                _loaded = false;
+                SyncCollectionEvent();
+                ChatHandler(player->GetSession()).SendSysMessage("AQ War Effort quest data changed. Tracking stopped; contact an administrator.");
+                return;
+            }
+            Campaign next = _campaign;
+            uint64& total = next.Contributions[faction][i];
+            if (total > std::numeric_limits<uint64>::max() - material.TurnInQuantity)
+            {
+                LOG_ERROR("module", "AQWarEffort: Quantity overflow for campaign ID {}, material {}.", _id, material.Name);
+                ChatHandler(player->GetSession()).SendSysMessage("AQ War Effort counter overflow; contact an administrator.");
+                return;
+            }
+            total += material.TurnInQuantity;
+            bool ready = IsComplete(next, TEAM_ALLIANCE) && IsComplete(next, TEAM_HORDE);
+            if (ready)
+                EnterPhase(next, AQ_PHASE_READY);
+            if (!Persist(next))
+            {
+                ChatHandler(player->GetSession()).SendSysMessage("AQ War Effort could not save this contribution. Please contact an administrator.");
+                return;
+            }
+            LOG_DEBUG("module", "AQWarEffort: Rewarded quest {} added {} {} to campaign ID {}, total {}.",
+                questId, material.TurnInQuantity, material.Name, _id, total);
+            if (ready)
+                ChatHandler(player->GetSession()).SendSysMessage("All the required War Effort resources have been gathered. The expedition presses on to Silithus!");
             return;
         }
-        ++next.Contributions[faction][i];
-        bool ready = IsComplete(next, TEAM_ALLIANCE) && IsComplete(next, TEAM_HORDE);
-        if (ready)
-            EnterPhase(next, AQ_PHASE_READY);
-        if (!Persist(next))
-        {
-            ChatHandler(player->GetSession()).SendSysMessage("AQ War Effort could not save this contribution. Please contact an administrator.");
-            return;
-        }
-        if (ready)
-            ChatHandler(player->GetSession()).SendSysMessage("All the required War Effort resources have been gathered. The expedition presses on to Silithus!");
-        return;
     }
 }
 
@@ -319,7 +458,7 @@ std::string Manager::Scores(uint8 faction, uint8 category) const
         Material const& material = Materials[faction][i];
         if (category != MATERIAL_CAT_COUNT && category != material.Category)
             continue;
-        text << material.Name << ": " << _campaign.Contributions[faction][i] * material.Multiplier
+        text << material.Name << ": " << _campaign.Contributions[faction][i]
             << " / " << _goals[faction][i] << "\n";
     }
     return text.str();
@@ -349,6 +488,26 @@ public:
     }
 };
 
+// Correct external/scheduled changes too, without changing the event's dates.
+class aq_war_effort_events : public GameEventScript
+{
+public:
+    aq_war_effort_events() : GameEventScript("aq_war_effort_events", {
+        GAMEEVENTHOOK_ON_START, GAMEEVENTHOOK_ON_STOP }) { }
+
+    void OnStart(uint16 eventId) override
+    {
+        if (eventId == CollectionEvent)
+            Manager::Instance().SyncCollectionEvent();
+    }
+
+    void OnStop(uint16 eventId) override
+    {
+        if (eventId == CollectionEvent)
+            Manager::Instance().SyncCollectionEvent();
+    }
+};
+
 class aq_war_effort_player : public PlayerScript
 {
 public:
@@ -357,7 +516,7 @@ public:
     void OnPlayerCompleteQuest(Player* player, Quest const* quest) override
     {
         // Verified in Player::RewardQuest: this hook runs after the reward, not objective completion.
-        Manager::Instance().OnQuestReward(player, quest->GetQuestId());
+        Manager::Instance().OnQuestReward(player, quest);
     }
 };
 
@@ -428,6 +587,7 @@ public:
         handler->SendSysMessage("Ahn'Qiraj War Effort");
         handler->PSendSysMessage("Campaign ID: {}", manager.GetId());
         handler->PSendSysMessage("Module: {}", manager.IsEnabled() ? "enabled" : "disabled");
+        handler->PSendSysMessage("Collection event 22: {}", sGameEventMgr->IsActiveEvent(CollectionEvent) ? "active" : "inactive");
         if (!manager.IsAvailable())
         {
             handler->SendSysMessage("Campaign data unavailable. Check server logs and restart after resolving the database error.");
@@ -487,6 +647,7 @@ void AddSC_aq_war_effort()
 {
     new aq_war_effort_world();
     new aq_war_effort_player();
+    new aq_war_effort_events();
     new npc_aq_war_effort_quartermaster();
     new aq_war_effort_commands();
 }

@@ -9,7 +9,7 @@
 ########################################
 #
 #    AQWarEffort.Enable
-#        Description: Enables contribution tracking and quartermaster reports (restart required)
+#        Description: Enables contribution tracking, collection event 22 control and quartermaster reports (restart required)
 #        Default:     0 - Disabled
 #                     1 - Enabled
 #
@@ -30,38 +30,40 @@ AQWarEffort.Id = 1
 #                     These are item quantities, NOT visual progression stages.
 #
 
-AQWarEffort.Goal.Horde.Bandages.01 = 5
-AQWarEffort.Goal.Horde.Bandages.02 = 10
-AQWarEffort.Goal.Horde.Bandages.03 = 15
-AQWarEffort.Goal.Horde.Food.01 = 5
-AQWarEffort.Goal.Horde.Food.02 = 10
-AQWarEffort.Goal.Horde.Food.03 = 15
-AQWarEffort.Goal.Horde.Herbs.01 = 5
-AQWarEffort.Goal.Horde.Herbs.02 = 10
-AQWarEffort.Goal.Horde.Herbs.03 = 15
-AQWarEffort.Goal.Horde.Metal.01 = 5
-AQWarEffort.Goal.Horde.Metal.02 = 10
-AQWarEffort.Goal.Horde.Metal.03 = 15
-AQWarEffort.Goal.Horde.Leather.01 = 5
-AQWarEffort.Goal.Horde.Leather.02 = 10
-AQWarEffort.Goal.Horde.Leather.03 = 15
+AQWarEffort.Goal.Horde.Bandages.01 = 20
+AQWarEffort.Goal.Horde.Bandages.02 = 40
+AQWarEffort.Goal.Horde.Bandages.03 = 60
+AQWarEffort.Goal.Horde.Food.01 = 20
+AQWarEffort.Goal.Horde.Food.02 = 40
+AQWarEffort.Goal.Horde.Food.03 = 60
+AQWarEffort.Goal.Horde.Herbs.01 = 20
+AQWarEffort.Goal.Horde.Herbs.02 = 40
+AQWarEffort.Goal.Horde.Herbs.03 = 60
+AQWarEffort.Goal.Horde.Metal.01 = 20
+AQWarEffort.Goal.Horde.Metal.02 = 40
+AQWarEffort.Goal.Horde.Metal.03 = 60
+AQWarEffort.Goal.Horde.Leather.01 = 10
+AQWarEffort.Goal.Horde.Leather.02 = 20
+AQWarEffort.Goal.Horde.Leather.03 = 30
 
-AQWarEffort.Goal.Alliance.Bandages.01 = 5
-AQWarEffort.Goal.Alliance.Bandages.02 = 10
-AQWarEffort.Goal.Alliance.Bandages.03 = 15
-AQWarEffort.Goal.Alliance.Food.01 = 5
-AQWarEffort.Goal.Alliance.Food.02 = 10
-AQWarEffort.Goal.Alliance.Food.03 = 15
-AQWarEffort.Goal.Alliance.Herbs.01 = 5
-AQWarEffort.Goal.Alliance.Herbs.02 = 10
-AQWarEffort.Goal.Alliance.Herbs.03 = 15
-AQWarEffort.Goal.Alliance.Metal.01 = 5
-AQWarEffort.Goal.Alliance.Metal.02 = 10
-AQWarEffort.Goal.Alliance.Metal.03 = 15
-AQWarEffort.Goal.Alliance.Leather.01 = 5
-AQWarEffort.Goal.Alliance.Leather.02 = 10
-AQWarEffort.Goal.Alliance.Leather.03 = 15
+AQWarEffort.Goal.Alliance.Bandages.01 = 20
+AQWarEffort.Goal.Alliance.Bandages.02 = 40
+AQWarEffort.Goal.Alliance.Bandages.03 = 60
+AQWarEffort.Goal.Alliance.Food.01 = 20
+AQWarEffort.Goal.Alliance.Food.02 = 40
+AQWarEffort.Goal.Alliance.Food.03 = 60
+AQWarEffort.Goal.Alliance.Herbs.01 = 20
+AQWarEffort.Goal.Alliance.Herbs.02 = 40
+AQWarEffort.Goal.Alliance.Herbs.03 = 60
+AQWarEffort.Goal.Alliance.Metal.01 = 20
+AQWarEffort.Goal.Alliance.Metal.02 = 40
+AQWarEffort.Goal.Alliance.Metal.03 = 60
+AQWarEffort.Goal.Alliance.Leather.01 = 10
+AQWarEffort.Goal.Alliance.Leather.02 = 20
+AQWarEffort.Goal.Alliance.Leather.03 = 30
 
 # All settings are loaded at startup; restart after editing.
-# Supplied goals 5/10/15 are small testing values inherited from this scaffold.
+# Each goal must be at least one full turn-in and an exact multiple of its quantity.
+# Defaults are one/two/three turn-ins: 20/40/60 items, or 10/20/30 for leather.
+# Invalid goals stop tracking and collection event 22 until corrected and restarted.
 # Configure production goals before enabling. Only WAR_EFFORT accepts contributions.

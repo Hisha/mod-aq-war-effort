@@ -31,18 +31,23 @@ exists.
 5. Check `.aqwareffort status` and the startup log.
 
 The module binds reporting to existing quartermasters 15700 (Horde) and 15701
-(Alliance). It does not spawn them or the resource quest givers, enable game
-events, or modify quest availability. Use your realm's existing War Effort NPC
-and quest availability configuration (the reference installation associates
-resource NPCs with game event 22). Applying the old quests.sql or warevent.sql
-is not an installation step for this module. Existing old-module world changes
-are not automatically undone.
+(Alliance). When enabled, it controls stock collection game event 22: active only
+in WAR_EFFORT, inactive in every other phase. It does not add collector spawns or
+change event dates. Existing stock event membership controls which NPCs appear.
+Applying the old quests.sql or warevent.sql is not an installation step. Existing
+old-module world changes are not automatically undone.
+
+**Existing installations:** stop worldserver and apply
+`data/sql/db-characters/updates/2026_09_14_00_material_quantities.sql` before
+running this version. Review [the follow-up and upgrade notes](docs/FOUNDATION_FOLLOWUP.md).
+Do not reset campaign rows or timestamps. Update your active config goals too;
+changing only the distributed template does not change your running configuration.
 
 ## Configuration
 
 The only template is `conf/mod_aq_war_effort.conf.dist`.
 
-- `AQWarEffort.Enable`: defaults to 0; enables turn-in tracking and custom reports.
+- `AQWarEffort.Enable`: defaults to 0; enables contribution tracking, event 22 control and custom reports.
 - `AQWarEffort.Id`: defaults to 1; independent contribution/state rows per ID.
 - `AQWarEffort.Goal.{Alliance|Horde}.{Bandages|Food|Herbs|Metal|Leather}.{01|02|03}`:
   thirty goals measured in item quantities. These are three material requirements,
@@ -50,8 +55,13 @@ The only template is `conf/mod_aq_war_effort.conf.dist`.
 
 All settings are read at startup and require restart after changes. Config reload
 logs this requirement and does not switch campaigns or partially reload goals.
-The scaffold's supplied 5/10/15 goals are retained; they are tiny test values,
-not suggested production goals. Zero means that material is already satisfied.
+Defaults are one/two/three full turn-ins: 20/40/60 for non-leather and 10/20/30
+for leather. Each goal must be at least one turn-in and an exact multiple of its
+quantity. Zero, negative, malformed, overflowing and non-multiple values are
+errors, not rounded. Unknown goal keys also fail validation. For example, Light
+Leather uses `AQWarEffort.Goal.Alliance.Leather.01`, not `...Alliance.LightLeather`.
+Invalid configuration leaves progression data untouched, disables tracking and
+stops event 22 until corrected and restarted (when this module is enabled).
 
 Material order for each faction is:
 
@@ -63,10 +73,12 @@ Material order for each faction is:
 | Metal | Iron / Thorium / Copper | Tin / Mithril / Copper |
 | Leather | Light / Medium / Thick | Heavy / Rugged / Thick |
 
-Each matching rewarded quest adds one turn-in: 20 items for bandages, food, herbs
-and metal; 10 for leather. Goals are compared without overflow. Counts may exceed
-a material's goal while other materials are still needed. Initial and repeat
-quest IDs are explicit in the material definitions. The core's
+Each matching rewarded quest adds actual item quantity: 20 items for bandages,
+food, herbs and metal; 10 for leather. Database values and scores are item totals,
+with no display multiplier. Counts may exceed a material's goal while other materials are still needed. Initial and repeat
+quest IDs, required item IDs and quantities are explicit and validated against all
+60 loaded quest templates at startup. The rewarded quest determines the faction
+counter, including in cross-faction play. The core's
 OnPlayerCompleteQuest hook is invoked from Player::RewardQuest, after reward.
 
 ## Campaign phases
@@ -97,15 +109,18 @@ next accepted contribution; startup does not undo the override.
 ## Database and durability
 
 - `aq_war_effort`: primary key `(id, faction)`, factions 0=Alliance and 1=Horde;
-  fifteen unsigned BIGINT counters store numbers of rewarded turn-ins.
+  fifteen unsigned BIGINT counters store actual material quantities.
 - `aq_war_effort_campaign`: primary key `id`; phase and unsigned BIGINT Unix epoch
   seconds `phase_started_at`, `gong_rung_at`, `opened_at`.
+- `aq_war_effort_schema`: singleton key `id=1`; `material_data_version=2` means
+  material quantities (historical version 1 means turn-ins).
 
-Both tables use InnoDB. Schema SQL is rerunnable and contains no destructive
+All three tables use InnoDB. Schema SQL is rerunnable and contains no destructive
 resets. Runtime inserts use non-destructive duplicate-key handling. No automatic
-import from legacy `wareffort` or `wareffort_campaign` is performed. If importing
-old data manually, stop worldserver and copy counters before the new campaign's
-first startup if you want first-initialization READY inference.
+import from legacy `wareffort` or `wareffort_campaign` is performed. Any manual
+import must use version-2 material quantities. Never insert legacy
+turn-in counts into an already migrated table. See the upgrade notes for the
+versioned conversion of this module's historical rows.
 
 Every turn-in and manual phase change uses a synchronous transaction followed by
 snapshot readback. A failed verification marks campaign data unavailable and stops
@@ -142,6 +157,7 @@ Quest 8743 (Bang a Gong!) is recognized and logged, but has no phase, spawn or
 availability effect. No gong boolean or duplicate campaign state is maintained.
 No Scarab Wall objects, AQ20/AQ40 AreaTriggers, opening animations/sounds, visual
 supply piles, event armies, crystals, loot, or ten-hour timers are installed.
+Only the stock resource collection event (22) is synchronized, not battle events.
 
 [AzerothCore mod-war-effort](https://github.com/azerothcore/mod-war-effort) is the
 source/reference for resource quest IDs, multipliers, quartermaster IDs and
