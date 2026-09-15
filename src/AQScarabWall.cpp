@@ -11,7 +11,6 @@
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
-#include <algorithm>
 
 namespace AQWarEffort
 {
@@ -80,6 +79,8 @@ namespace
     void PlayStageSound(uint32 stage)
     {
         Map* map = sMapMgr->CreateBaseMap(WallMap);
+        if (!map)
+            return;
         for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
             if (spawnId == WallParts[stage].Spawn && IsOwnedWall(go))
             {
@@ -117,6 +118,8 @@ void Manager::SyncWall()
     Map* map = sMapMgr->CreateBaseMap(WallMap);
     // Load the canonical grid even when nobody has visited Silithus since startup.
     // AddWorld also reconciles lazy reloads, with no retained GameObject pointers.
+    if (!map)
+        return;
     map->LoadGrid(WallX, WallY);
     uint32 found = 0;
     for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
@@ -139,10 +142,32 @@ void Manager::SyncWall()
 void Manager::BeginWallCeremony()
 {
     std::lock_guard lock(_mutex);
+    _wallEvents.Reset();
+    _wallCeremony = false;
+    if (!ControlsWall() || _campaign.Phase != AQ_PHASE_TEN_HOUR_WAR)
+        return;
+    // Missing pieces must not leave a partial ceremony.
+    Map* map = sMapMgr->CreateBaseMap(WallMap);
+    if (map)
+        map->LoadGrid(WallX, WallY);
+    uint32 found = 0;
+    if (map)
+        for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
+            if (IsOwnedWall(go))
+                ++found;
+    if (found != 3)
+    {
+        SyncWall();
+        LOG_WARN("module", "AQWarEffort: Opening presentation skipped: {} of 3 wall parts available; campaign remains TEN_HOUR_WAR.", found);
+        return;
+    }
     _wallCeremony = true;
     _wallCeremonyElapsed = 0;
     SyncWall();
     PlayStageSound(0);
+    // Event IDs 1/2 start runes/gate; 3 settles the permanent open state.
+    for (uint32 stage = 1; stage <= 3; ++stage)
+        _wallEvents.ScheduleEvent(stage, Milliseconds(stage * PartAnimationMs));
 }
 
 void Manager::UpdateWallCeremony(uint32 diff)
@@ -150,17 +175,24 @@ void Manager::UpdateWallCeremony(uint32 diff)
     std::lock_guard lock(_mutex);
     if (!_wallCeremony)
         return;
-    uint32 previous = _wallCeremonyElapsed;
-    _wallCeremonyElapsed = uint32(std::min<uint64>(uint64(previous) + diff, CeremonyDurationMs));
-    if (_wallCeremonyElapsed == CeremonyDurationMs)
-        _wallCeremony = false;
-    // Reconcile without logging/loading a grid every tick. Update/AddWorld cover later grid reloads.
-    Map* map = sMapMgr->CreateBaseMap(WallMap);
-    for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
-        ReconcilePart(go);
-    for (uint32 stage = 1; stage < 3; ++stage)
-        if (previous < WallParts[stage].StartsAt && _wallCeremonyElapsed >= WallParts[stage].StartsAt)
+    _wallEvents.Update(diff);
+    while (uint32 stage = _wallEvents.ExecuteEvent())
+    {
+        _wallCeremonyElapsed = stage * PartAnimationMs;
+        if (_wallCeremonyElapsed >= CeremonyDurationMs)
+            _wallCeremony = false;
+        Map* map = sMapMgr->CreateBaseMap(WallMap);
+        if (!map)
+        {
+            _wallCeremony = false;
+            _wallEvents.Reset();
+            return; // AddWorld will apply the persisted final state on later grid load.
+        }
+        for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
+            ReconcilePart(go);
+        if (_wallCeremony)
             PlayStageSound(stage);
+    }
 }
 
 void RegisterScarabWallScripts()

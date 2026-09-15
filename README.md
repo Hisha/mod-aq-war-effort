@@ -135,10 +135,11 @@ do not edit active rows concurrently. The transaction covers these module tables
 not core player inventory/quest persistence. Live crash/reward recovery remains
 an integration test requirement.
 
-Entering any different phase sets phase_started_at. Entering TEN_HOUR_WAR also
-sets gong_rung_at; entering OPEN sets opened_at. Same-phase overrides preserve
-timestamps. Backward overrides retain historical gong/open timestamps; explicit
-re-entry replaces the corresponding timestamp. No timer uses these fields yet.
+Entering a different phase sets phase_started_at. Only a real, accepted 8743 gong
+reward sets gong_rung_at; administrative `phase war` preserves its previous value.
+Entering OPEN sets opened_at. Same-phase overrides preserve timestamps. Neither
+real gong acceptance nor an administrative return to TEN_HOUR_WAR changes opened_at.
+No timer uses these fields yet.
 
 ## Commands
 

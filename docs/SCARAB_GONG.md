@@ -7,7 +7,9 @@ battle content, Jonathan/Rajaxx, area triggers, barriers, or quest 8519 changes.
 ## Installation and ownership
 
 Stop worldserver, back up both databases, deploy the changed/new module files,
-and apply these new pre-release base files explicitly to existing installs:
+and the existing gong schema must already be installed. This follow-up requires no
+SQL migration or reapplication on a working installation. Fresh installs retain
+these existing convergent base files:
 
 - Characters: `data/sql/db-characters/base/002_aq_scarab_gong.sql`.
 - World: `data/sql/db-world/base/003_aq_scarab_gong.sql`.
@@ -37,8 +39,9 @@ old mod-war-effort alongside this module. Deleting a row by entry is not a repai
 AzerothCore alone checks eligibility and interaction, consumes the Scepter, and
 awards items, reputation and quest/achievement history. This module does not call
 RewardQuest, consume/grant items, or change quest templates. Stock 8743 requires
-8742 and item 21175; the checked stock data does not itself provide a complete
-classic Scepter acquisition finale. Restoring that chain is outside this milestone.
+8742 and item 21175. The current deployment has verified normal completion of
+8742 and natural availability of 8743 with the required Brood reputation. This
+update leaves that working progression and the waiting test character untouched.
 
 ## Authorization and successful reward
 
@@ -79,8 +82,9 @@ The generic PlayerScript reward hook does not initiate opening.
    If stock rejected the attempt, clear the unaccepted intent after verifying the
    deletion. If live success was observed but its save is not durable yet, retain
    the reservation and wait. Never time out and discard that successful evidence.
-4. Once the reward is durable, one conditional multi-table UPDATE atomically sets
-   campaign phase=3, phase_started_at=UNIX_TIMESTAMP(), gong_rung_at=UNIX_TIMESTAMP()
+4. Once the reward is durable, the existing Manager::Persist boundary performs
+   one conditional multi-table UPDATE, atomically setting campaign phase=3 and
+   phase_started_at/gong_rung_at to the same current server timestamp
    and journal accepted=1. It requires READY and the intent's original phase epoch.
    It leaves contributions, opened_at and other data untouched. Read back both
    campaign and journal before publishing state or beginning presentation.
@@ -109,6 +113,13 @@ as ringing tests; do not use them during a pending recovery attempt.
 changed: roots 9100147, runes 9100148, gate 9100146. Entry matching alone is never
 used to select a wall. Quest 8519's summoned walls remain untouched.
 
+The existing manager owns an EventMap, advanced by WorldScript::OnUpdate after
+session/map processing. It schedules runes at 4000 ms, gate at 8000 ms, and final
+absence at 12000 ms. No thread sleeps and no delayed callback retains an object
+pointer. Admin changes/startup reset the event map. If any required part is absent
+at the start, the cosmetic sequence is skipped; AddWorld/phase synchronization
+still applies the persisted open state when the objects become available.
+
 All timing is centralized in `PartAnimationMs`, `CeremonyDurationMs` and the
 `WallParts` table in AQScarabWall.cpp:
 
@@ -130,7 +141,7 @@ Four seconds per part is provisional. Syntax/runtime tests cannot establish
 client animation duration, acoustic range or duplicate client-provided sounds.
 Validate these three sounds and animations on the deployed 3.3.5a client before
 considering timing final. Administrative phase commands cancel any live ceremony
-and reconcile immediately; they do not play sounds.
+and reconcile immediately; they do not play sounds or set gong_rung_at.
 
 ## Precise live-test procedure
 

@@ -124,6 +124,7 @@ void Manager::InitializeGong()
     _gongPending = false;
     _gongObserved = false;
     _wallCeremony = false;
+    _wallEvents.Reset();
     // Aggregate returns one row even when empty, distinguishing an absent schema/query failure.
     QueryResult schema = CharacterDatabase.Query("SELECT COUNT(*) FROM aq_war_effort_gong WHERE id = {}", _id);
     if (!schema)
@@ -186,6 +187,9 @@ void Manager::ObserveGongReward(Player* player, GameObject* go)
     if (IsOwnedGong(go) && _gongPending && _gongPlayer == player->GetGUID().GetCounter()
         && player->GetQuestRewardStatus(QuestBangGong))
         _gongObserved = true;
+    else
+        LOG_DEBUG("module", "AQWarEffort: Ignored duplicate/ineligible 8743 gong callback in phase {}.",
+            PhaseName(_campaign.Phase));
     // RewardQuest queues an asynchronous character save. Do not assume it is durable here.
 }
 
@@ -227,26 +231,16 @@ void Manager::UpdateGong(uint32 diff)
         _gongPending = false;
         return;
     }
-    // One atomic multi-table UPDATE accepts exactly a pending intent in its original READY epoch.
-    // Supply counters, opened_at and all unrelated campaign fields remain untouched.
-    CharacterDatabase.DirectExecute(
-        "UPDATE aq_war_effort_campaign c JOIN aq_war_effort_gong g ON g.id = c.id "
-        "JOIN character_queststatus_rewarded r ON r.guid = g.player_guid AND r.quest = {} "
-        "SET c.phase = {}, c.phase_started_at = UNIX_TIMESTAMP(), c.gong_rung_at = UNIX_TIMESTAMP(), g.accepted = 1 "
-        "WHERE c.id = {} AND c.phase = {} AND c.phase_started_at = g.ready_started_at AND g.accepted = 0",
-        QuestBangGong, uint32(AQ_PHASE_TEN_HOUR_WAR), _id, uint32(AQ_PHASE_READY));
-    Campaign accepted;
-    QueryResult journal = CharacterDatabase.Query("SELECT accepted FROM aq_war_effort_gong WHERE id = {}", _id);
-    if (!journal || !(*journal)[0].Get<bool>() || !ReadCampaign(accepted)
-        || accepted.Phase != AQ_PHASE_TEN_HOUR_WAR)
+    Campaign accepted = _campaign;
+    EnterPhase(accepted, AQ_PHASE_TEN_HOUR_WAR);
+    accepted.GongRungAt = accepted.PhaseStartedAt;
+    if (!Persist(accepted, true))
     {
         _gongHealthy = false;
         LOG_ERROR("module", "AQWarEffort: Gong acceptance could not be verified; durable intent retained for restart.");
         return;
     }
-    _campaign = accepted;
     _gongPending = false;
-    SyncCollectionEvent();
     if (_gongObserved)
         BeginWallCeremony();
     else

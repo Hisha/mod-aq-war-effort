@@ -8,6 +8,7 @@
 #define MOD_AQ_WAR_EFFORT_H
 
 #include "Define.h"
+#include "EventMap.h"
 #include <array>
 #include <string>
 #include <mutex>
@@ -103,7 +104,7 @@ namespace AQWarEffort
         bool ValidateConfiguration();
         static bool ValidateQuest(Material const& material, Quest const* quest);
         bool ReadCampaign(Campaign& campaign) const;
-        bool Persist(Campaign const& next);
+        bool Persist(Campaign const& next, bool gongAcceptance = false);
         bool IsComplete(Campaign const& campaign, uint8 faction) const;
         static void EnterPhase(Campaign& campaign, AQCampaignPhase phase);
 
@@ -114,6 +115,7 @@ namespace AQWarEffort
         uint32 _gongPlayer{ 0 };
         bool _wallCeremony{ false };
         uint32 _wallCeremonyElapsed{ 0 };
+        EventMap _wallEvents;
         bool _initialized{ false };
         bool _syncingEvent{ false };
         bool _enabled{ false };

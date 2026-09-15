@@ -335,35 +335,54 @@ void Manager::EnterPhase(Campaign& campaign, AQCampaignPhase phase)
 {
     campaign.Phase = phase;
     campaign.PhaseStartedAt = uint64(std::time(nullptr));
-    if (phase == AQ_PHASE_TEN_HOUR_WAR)
-        campaign.GongRungAt = campaign.PhaseStartedAt;
     if (phase == AQ_PHASE_OPEN)
         campaign.OpenedAt = campaign.PhaseStartedAt;
 }
 
-bool Manager::Persist(Campaign const& next)
+bool Manager::Persist(Campaign const& next, bool gongAcceptance)
 {
     std::lock_guard lock(_mutex);
     if (!_loaded)
         return false;
-    CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
-    for (uint8 faction = 0; faction < FactionCount; ++faction)
+    if (gongAcceptance)
     {
-        auto const& c = next.Contributions[faction];
-        transaction->Append("UPDATE aq_war_effort SET bandages01 = {}, bandages02 = {}, bandages03 = {}, "
-            "food01 = {}, food02 = {}, food03 = {}, herbs01 = {}, herbs02 = {}, herbs03 = {}, "
-            "metals01 = {}, metals02 = {}, metals03 = {}, leather01 = {}, leather02 = {}, leather03 = {} "
-            "WHERE id = {} AND faction = {}", c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8],
-            c[9], c[10], c[11], c[12], c[13], c[14], _id, uint32(faction));
+        if (!_enabled || !_gongPending || _campaign.Phase != AQ_PHASE_READY
+            || next.Phase != AQ_PHASE_TEN_HOUR_WAR)
+            return false;
+        // The existing persistence boundary also owns atomic gong acceptance/recovery.
+        // Touch neither supply counters nor opened_at in this conditional transition.
+        CharacterDatabase.DirectExecute(
+            "UPDATE aq_war_effort_campaign c JOIN aq_war_effort_gong g ON g.id = c.id "
+            "JOIN character_queststatus_rewarded r ON r.guid = g.player_guid AND r.quest = {} "
+            "SET c.phase = {}, c.phase_started_at = {}, c.gong_rung_at = {}, g.accepted = 1 "
+            "WHERE c.id = {} AND c.phase = {} AND c.phase_started_at = g.ready_started_at AND g.accepted = 0",
+            QuestBangGong, uint32(next.Phase), next.PhaseStartedAt, next.GongRungAt, _id, uint32(AQ_PHASE_READY));
     }
-    transaction->Append("UPDATE aq_war_effort_campaign SET phase = {}, phase_started_at = {}, "
-        "gong_rung_at = {}, opened_at = {} WHERE id = {}", uint32(next.Phase), next.PhaseStartedAt,
-        next.GongRungAt, next.OpenedAt, _id);
-    CharacterDatabase.DirectCommitTransaction(transaction);
+    else
+    {
+        CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
+        for (uint8 faction = 0; faction < FactionCount; ++faction)
+        {
+            auto const& c = next.Contributions[faction];
+            transaction->Append("UPDATE aq_war_effort SET bandages01 = {}, bandages02 = {}, bandages03 = {}, "
+                "food01 = {}, food02 = {}, food03 = {}, herbs01 = {}, herbs02 = {}, herbs03 = {}, "
+                "metals01 = {}, metals02 = {}, metals03 = {}, leather01 = {}, leather02 = {}, leather03 = {} "
+                "WHERE id = {} AND faction = {}", c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8],
+                c[9], c[10], c[11], c[12], c[13], c[14], _id, uint32(faction));
+        }
+        transaction->Append("UPDATE aq_war_effort_campaign SET phase = {}, phase_started_at = {}, "
+            "gong_rung_at = {}, opened_at = {} WHERE id = {}", uint32(next.Phase), next.PhaseStartedAt,
+            next.GongRungAt, next.OpenedAt, _id);
+        CharacterDatabase.DirectCommitTransaction(transaction);
+    }
 
     // The core's synchronous transaction API returns void. Verify before publishing state.
     Campaign persisted;
-    if (!ReadCampaign(persisted) || !(persisted == next))
+    QueryResult journal;
+    if (gongAcceptance)
+        journal = CharacterDatabase.Query("SELECT accepted FROM aq_war_effort_gong WHERE id = {}", _id);
+    if (!ReadCampaign(persisted) || !(persisted == next)
+        || (gongAcceptance && (!journal || !(*journal)[0].Get<bool>())))
     {
         _loaded = false;
         LOG_ERROR("module", "AQWarEffort: Campaign ID {} write could not be verified. Tracking stopped; inspect DB and restart.", _id);
@@ -376,7 +395,7 @@ bool Manager::Persist(Campaign const& next)
             PhaseName(_campaign.Phase), PhaseName(next.Phase));
     _campaign = next;
     SyncCollectionEvent();
-    if (phaseChanged)
+    if (phaseChanged && !gongAcceptance)
         SyncWall();
     return true;
 }
@@ -387,6 +406,7 @@ bool Manager::SetPhase(AQCampaignPhase phase)
     if (_gongPending || !_loaded || phase > AQ_PHASE_OPEN)
         return false;
     _wallCeremony = false;
+    _wallEvents.Reset();
     if (phase == _campaign.Phase)
     {
         SyncCollectionEvent();
@@ -404,7 +424,11 @@ void Manager::OnQuestReward(Player* player, Quest const* quest)
     uint32 questId = quest->GetQuestId();
     // Gong acceptance belongs to the giver-specific post-reward observer.
     if (questId == QuestBangGong)
+    {
+        LOG_DEBUG("module", "AQWarEffort: 8743 reward observed in phase {}; only the authorized gong observer accepts opening.",
+            PhaseName(_campaign.Phase));
         return;
+    }
 
     // Classify by the rewarded quest, not the player's current faction (e.g. cross-faction play).
     for (uint8 faction = 0; faction < FactionCount; ++faction)
