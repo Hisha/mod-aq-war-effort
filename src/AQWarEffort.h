@@ -10,9 +10,11 @@
 #include "Define.h"
 #include <array>
 #include <string>
+#include <mutex>
 
 class Player;
 class Quest;
+class GameObject;
 
 enum AQCampaignPhase : uint8
 {
@@ -64,16 +66,17 @@ namespace AQWarEffort
     };
 
     void RegisterScarabWallScripts();
+    void RegisterScarabGongScripts();
 
     class Manager
     {
     public:
         static Manager& Instance();
         void Initialize();
-        bool IsEnabled() const { return _enabled; }
-        bool IsAvailable() const { return _loaded; }
+        bool IsEnabled() const { std::lock_guard lock(_mutex); return _enabled; }
+        bool IsAvailable() const { std::lock_guard lock(_mutex); return _loaded; }
         uint32 GetId() const { return _id; }
-        AQCampaignPhase GetPhase() const { return _campaign.Phase; }
+        AQCampaignPhase GetPhase() const { std::lock_guard lock(_mutex); return _campaign.Phase; }
         static char const* PhaseName(AQCampaignPhase phase);
         static Material const& GetMaterial(uint8 faction, uint8 material);
         bool IsComplete(uint8 faction) const;
@@ -83,6 +86,17 @@ namespace AQWarEffort
         void OnQuestReward(Player* player, Quest const* quest);
         void SyncCollectionEvent();
         void SyncWall();
+        // One lock also serializes PROCESS_INPLACE gong packets across map workers.
+        std::recursive_mutex& Mutex() const { return _mutex; }
+        void InitializeGong();
+        bool PrepareGong(Player* player, GameObject* go);
+        void ObserveGongReward(Player* player, GameObject* go);
+        void UpdateGong(uint32 diff);
+        bool GongAvailable() const;
+        void BeginWallCeremony();
+        void UpdateWallCeremony(uint32 diff);
+        uint32 WallCeremonyElapsed() const { return _wallCeremonyElapsed; }
+        bool WallCeremonyActive() const { return _wallCeremony; }
 
     private:
         Manager() = default;
@@ -93,6 +107,13 @@ namespace AQWarEffort
         bool IsComplete(Campaign const& campaign, uint8 faction) const;
         static void EnterPhase(Campaign& campaign, AQCampaignPhase phase);
 
+        mutable std::recursive_mutex _mutex;
+        bool _gongHealthy{ false };
+        bool _gongPending{ false };
+        bool _gongObserved{ false };
+        uint32 _gongPlayer{ 0 };
+        bool _wallCeremony{ false };
+        uint32 _wallCeremonyElapsed{ 0 };
         bool _initialized{ false };
         bool _syncingEvent{ false };
         bool _enabled{ false };

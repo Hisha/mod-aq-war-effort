@@ -11,6 +11,7 @@
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
+#include <algorithm>
 
 namespace AQWarEffort
 {
@@ -22,12 +23,16 @@ namespace
     constexpr char WallScript[] = "go_aq_war_effort_wall";
 
     // Reserved, collision-checked by 002_aq_scarab_wall.sql; never match by entry alone.
-    struct WallPart { uint32 Spawn; uint32 Entry; };
+    // Provisional client timings: animate each piece for 4 seconds, then hide it.
+    // Order and sounds follow the historical opening. See docs/SCARAB_GONG.md.
+    constexpr uint32 PartAnimationMs = 4000;
+    constexpr uint32 CeremonyDurationMs = 3 * PartAnimationMs;
+    struct WallPart { uint32 Spawn; uint32 Entry; uint32 Sound; uint32 StartsAt; };
     constexpr WallPart WallParts[] =
     {
-        { 9100147, 176147 },
-        { 9100148, 176148 },
-        { 9100146, 176146 }
+        { 9100147, 176147, 7114, 0 },
+        { 9100148, 176148, 7116, PartAnimationMs },
+        { 9100146, 176146, 7115, 2 * PartAnimationMs }
     };
 
     bool ControlsWall()
@@ -46,18 +51,41 @@ namespace
 
     void ReconcilePart(GameObject* go)
     {
+        auto& manager = Manager::Instance();
+        std::lock_guard lock(manager.Mutex());
         if (!ControlsWall() || !IsOwnedWall(go))
             return;
-        AQCampaignPhase phase = Manager::Instance().GetPhase();
+        AQCampaignPhase phase = manager.GetPhase();
         bool closed = phase == AQ_PHASE_WAR_EFFORT || phase == AQ_PHASE_READY;
-        // Keep the stock closed pose. Opening is absence, not an animation/ceremony.
-        // Phase mask zero makes the wall absent without playing its opening animation.
-        if (go->GetPhaseMask() != (closed ? 1u : 0u))
-            go->SetPhaseMask(closed ? 1u : 0u, true);
-        if (go->GetGoState() != GO_STATE_READY)
-            go->SetGoState(GO_STATE_READY);
-        // Visibility alone is not sufficient: explicitly update physical collision too.
+        bool visible = closed;
+        GOState pose = GO_STATE_READY;
+        if (manager.WallCeremonyActive() && phase == AQ_PHASE_TEN_HOUR_WAR)
+        {
+            for (WallPart const& part : WallParts)
+                if (go->GetSpawnId() == part.Spawn)
+                {
+                    uint32 elapsed = manager.WallCeremonyElapsed();
+                    closed = elapsed < part.StartsAt;
+                    visible = elapsed < part.StartsAt + PartAnimationMs;
+                    pose = closed ? GO_STATE_READY : GO_STATE_ACTIVE;
+                }
+        }
+        if (go->GetPhaseMask() != (visible ? 1u : 0u))
+            go->SetPhaseMask(visible ? 1u : 0u, true);
+        if (go->GetGoState() != pose)
+            go->SetGoState(pose);
         go->EnableCollision(closed);
+    }
+
+    void PlayStageSound(uint32 stage)
+    {
+        Map* map = sMapMgr->CreateBaseMap(WallMap);
+        for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
+            if (spawnId == WallParts[stage].Spawn && IsOwnedWall(go))
+            {
+                go->PlayDistanceSound(WallParts[stage].Sound);
+                break;
+            }
     }
 
     class aq_scarab_wall_objects : public AllGameObjectScript
@@ -83,6 +111,7 @@ namespace
 
 void Manager::SyncWall()
 {
+    std::lock_guard lock(_mutex);
     if (!ControlsWall())
         return;
     Map* map = sMapMgr->CreateBaseMap(WallMap);
@@ -102,8 +131,36 @@ void Manager::SyncWall()
         LOG_ERROR("module", "AQWarEffort: Scarab Wall found {} of 3 owned objects. Apply 002_aq_scarab_wall.sql and restart.", found);
     else
         LOG_INFO("module", "AQWarEffort: Scarab Wall reconciled {} for campaign ID {}, phase {}.",
-            GetPhase() == AQ_PHASE_WAR_EFFORT || GetPhase() == AQ_PHASE_READY ? "closed" : "absent",
+            _wallCeremony ? "opening ceremony" :
+                (GetPhase() == AQ_PHASE_WAR_EFFORT || GetPhase() == AQ_PHASE_READY ? "closed" : "absent"),
             GetId(), PhaseName(GetPhase()));
+}
+
+void Manager::BeginWallCeremony()
+{
+    std::lock_guard lock(_mutex);
+    _wallCeremony = true;
+    _wallCeremonyElapsed = 0;
+    SyncWall();
+    PlayStageSound(0);
+}
+
+void Manager::UpdateWallCeremony(uint32 diff)
+{
+    std::lock_guard lock(_mutex);
+    if (!_wallCeremony)
+        return;
+    uint32 previous = _wallCeremonyElapsed;
+    _wallCeremonyElapsed = uint32(std::min<uint64>(uint64(previous) + diff, CeremonyDurationMs));
+    if (_wallCeremonyElapsed == CeremonyDurationMs)
+        _wallCeremony = false;
+    // Reconcile without logging/loading a grid every tick. Update/AddWorld cover later grid reloads.
+    Map* map = sMapMgr->CreateBaseMap(WallMap);
+    for (auto const& [spawnId, go] : map->GetGameObjectBySpawnIdStore())
+        ReconcilePart(go);
+    for (uint32 stage = 1; stage < 3; ++stage)
+        if (previous < WallParts[stage].StartsAt && _wallCeremonyElapsed >= WallParts[stage].StartsAt)
+            PlayStageSound(stage);
 }
 
 void RegisterScarabWallScripts()

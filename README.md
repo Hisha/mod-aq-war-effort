@@ -8,7 +8,9 @@ recognizes initial and repeatable resource quests, and reports totals through
 quartermasters and administrator commands. Campaign state and contributions are
 persisted together on every accepted turn-in. No collection or READY countdown
 exists. The stock Scarab Wall is now phase-controlled; see
-[Scarab Wall installation and tests](docs/SCARAB_WALL.md).
+[Scarab Wall installation and tests](docs/SCARAB_WALL.md). The authorized Scarab Gong
+now accepts the stock finale in READY and opens those same wall spawns; see
+[Scarab Gong installation, recovery and live tests](docs/SCARAB_GONG.md).
 
 ## Installation
 
@@ -18,15 +20,17 @@ exists. The stock Scarab Wall is now phase-controlled; see
 2. With worldserver stopped, apply the canonical SQL files to the appropriate
    databases (or use the core's configured module SQL updater):
    - Characters: `data/sql/db-characters/base/001_aq_war_effort.sql`
+   - Characters: `data/sql/db-characters/base/002_aq_scarab_gong.sql` (existing installs too)
    - World: `data/sql/db-world/base/001_aq_war_effort_quartermasters.sql`
    - World: `data/sql/db-world/base/002_aq_scarab_wall.sql` (also apply to existing installs)
+   - World: `data/sql/db-world/base/003_aq_scarab_gong.sql` (existing installs too)
 3. Regenerate your existing AzerothCore build, then build worldserver:
    ```sh
    cmake -S /path/to/azerothcore-wotlk -B /path/to/build -DMODULES=static
    cmake --build /path/to/build --target worldserver -j2
    ```
    Preserve the rest of your installation's normal CMake options. The modern core
-   discovers both source files and `Addmod_aq_war_effortScripts()` automatically.
+   discovers source files and `Addmod_aq_war_effortScripts()` automatically.
 4. Copy the installed `mod_aq_war_effort.conf.dist` to
    `mod_aq_war_effort.conf` in your module config directory. Set goals, set
    `AQWarEffort.Enable = 1`, and restart worldserver.
@@ -89,15 +93,14 @@ OnPlayerCompleteQuest hook is invoked from Player::RewardQuest, after reward.
 |---|---|---|
 | 0 | DISABLED | Administratively inactive; no contributions counted. |
 | 1 | WAR_EFFORT | Material collection active indefinitely; wall closed. |
-| 2 | READY | All resources collected; waits indefinitely with wall closed. |
-| 3 | TEN_HOUR_WAR | Wall absent; timed lifecycle is future work. |
+| 2 | READY | Wall closed; an eligible stock 8743 reward at the authorized gong starts opening. |
+| 3 | TEN_HOUR_WAR | Live ceremony finishes with wall absent; restart opens immediately without replay. |
 | 4 | OPEN | Stored completed state; wall absent. |
 
 Only WAR_EFFORT accepts contributions, and only while the config is enabled.
-Other phases do not block quest rewards; those rewards do not alter campaign
+Other phases do not block collection quest rewards; those rewards do not alter campaign
 totals. A rewarded contribution that satisfies both factions atomically saves
-the totals and READY, logs the transition, and notifies the contributor. There
-are no automatic transitions beyond READY. An administrator may override any
+the totals and READY, logs the transition, and notifies the contributor. The gong can then advance READY to TEN_HOUR_WAR. There is no timed transition to OPEN. An administrator may override any
 phase, including OPEN, without resetting material counts.
 
 Startup initializes absent faction rows without changing existing counts, then
@@ -151,15 +154,16 @@ re-entry replaces the corresponding timestamp. No timer uses these fields yet.
 
 All commands support console use. Missing/invalid/extra phase arguments print
 usage. Changes report previous and new phase. Admin state overrides remain
-available with the config disabled, provided campaign data loaded successfully.
+available with the config disabled, provided campaign data loaded successfully and no gong reward/recovery is pending.
 
 ## Scope and attribution
 
-Quest 8743 (Bang a Gong!) is recognized and logged, but has no phase, spawn or
-availability effect. No gong boolean or duplicate campaign state is maintained.
-The three stock Scarab Wall objects are restored and phase-controlled. No
-AQ20/AQ40 AreaTrigger changes, opening animations/sounds, visual supply piles,
-event armies, crystals, loot, or ten-hour timers are installed.
+Quest 8743 remains stock-owned for eligibility, item consumption, rewards, reputation
+and achievement/quest history. The module authorizes one dedicated 180717 gong,
+persists READY -> TEN_HOUR_WAR with a durable recovery journal, and presents
+roots -> runes -> gate on its existing wall spawns. No AQ20/AQ40 AreaTrigger changes,
+quest 8519 changes, Jonathan/Rajaxx, visual supply piles, event armies, crystals,
+loot, or ten-hour timers are installed.
 Only the stock resource collection event (22) is synchronized, not battle events.
 
 [AzerothCore mod-war-effort](https://github.com/azerothcore/mod-war-effort) is the
@@ -177,9 +181,9 @@ are documented sources for future selective migration, not active SQL here.
 Legacy permanent spawns, helper shell scripts and unfinished visual code are
 intentionally excluded.
 
-Planned lifecycle: WAR_EFFORT → READY → valid Scepter bearer rings gong →
-TEN_HOUR_WAR → ten restart-safe real hours → OPEN. The ordered wall opening ceremony and event lifecycle
-remain future milestones.
+Implemented lifecycle: WAR_EFFORT → READY → successful authorized gong reward →
+TEN_HOUR_WAR, including the ordered wall-opening ceremony. The ten-hour timer,
+battle content and automatic transition to OPEN remain future milestones.
 
 The original repository's MIT license and copyright are retained alongside the
 new repository's MIT notice in LICENSE. Source/config files retain the reference's

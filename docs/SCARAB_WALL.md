@@ -1,9 +1,9 @@
 # Scarab Wall: closed versus absent
 
-This milestone manages only the physical stock wall. It does not implement a
-gong ceremony, sounds, battle content, timers, or AQ20/AQ40 AreaTrigger changes.
-Collection, contributions, character SQL, phase persistence and commands retain
-their existing behavior.
+This document describes the original closed-versus-absent wall milestone. The
+same controller now also presents successful gong openings; see
+[SCARAB_GONG.md](SCARAB_GONG.md). The phase-command and startup tests below still
+apply. Collection behavior and quest 8519 remain unchanged.
 
 ## Source audit and placement
 
@@ -106,3 +106,11 @@ wall, intentionally outside this module's ownership.
 Build validation compiles the module against the inspected core. A mock-core
 harness executes the actual wall code for phases, ownership, reload, collision,
 interaction and idempotence. These checks do not replace the live movement test.
+
+## Gong milestone integration
+
+The current controller also owns the live opening ceremony; see
+[SCARAB_GONG.md](SCARAB_GONG.md). Only a successful, durably accepted authorized
+gong reward enables the transient animation stage. Administrative phase commands
+and startup reconciliation continue to use the immediate closed/absent behavior
+described above. No second controller or replacement wall spawns are introduced.

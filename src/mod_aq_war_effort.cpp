@@ -245,6 +245,7 @@ bool Manager::IsComplete() const
 
 void Manager::Initialize()
 {
+    std::lock_guard lock(_mutex);
     _loaded = false;
     _enabled = sConfigMgr->GetOption<bool>("AQWarEffort.Enable", false);
     _id = sConfigMgr->GetOption<uint32>("AQWarEffort.Id", 1);
@@ -296,6 +297,7 @@ void Manager::Initialize()
         return;
     }
     _loaded = true;
+    InitializeGong();
     LOG_INFO("module", "AQWarEffort: Loaded campaign ID {}, phase {}, tracking {}", _id,
         PhaseName(_campaign.Phase), _enabled ? "enabled" : "disabled");
     SyncCollectionEvent();
@@ -341,6 +343,7 @@ void Manager::EnterPhase(Campaign& campaign, AQCampaignPhase phase)
 
 bool Manager::Persist(Campaign const& next)
 {
+    std::lock_guard lock(_mutex);
     if (!_loaded)
         return false;
     CharacterDatabaseTransaction transaction = CharacterDatabase.BeginTransaction();
@@ -380,8 +383,10 @@ bool Manager::Persist(Campaign const& next)
 
 bool Manager::SetPhase(AQCampaignPhase phase)
 {
-    if (!_loaded || phase > AQ_PHASE_OPEN)
+    std::lock_guard lock(_mutex);
+    if (_gongPending || !_loaded || phase > AQ_PHASE_OPEN)
         return false;
+    _wallCeremony = false;
     if (phase == _campaign.Phase)
     {
         SyncCollectionEvent();
@@ -395,14 +400,12 @@ bool Manager::SetPhase(AQCampaignPhase phase)
 
 void Manager::OnQuestReward(Player* player, Quest const* quest)
 {
+    std::lock_guard lock(_mutex);
     uint32 questId = quest->GetQuestId();
+    // Gong acceptance belongs to the giver-specific post-reward observer.
     if (questId == QuestBangGong)
-    {
-        if (_enabled && _loaded)
-            LOG_INFO("module", "AQWarEffort: Quest 8743 rewarded in campaign ID {}, phase {}. Gong lifecycle is not implemented.",
-                _id, PhaseName(_campaign.Phase));
         return;
-    }
+
     // Classify by the rewarded quest, not the player's current faction (e.g. cross-faction play).
     for (uint8 faction = 0; faction < FactionCount; ++faction)
     {
@@ -479,12 +482,14 @@ class aq_war_effort_world : public WorldScript
 {
 public:
     aq_war_effort_world() : WorldScript("aq_war_effort_world", {
-        WORLDHOOK_ON_STARTUP, WORLDHOOK_ON_AFTER_CONFIG_LOAD }) { }
+        WORLDHOOK_ON_STARTUP, WORLDHOOK_ON_AFTER_CONFIG_LOAD, WORLDHOOK_ON_UPDATE }) { }
 
     void OnStartup() override
     {
         Manager::Instance().Initialize();
     }
+
+    void OnUpdate(uint32 diff) override { Manager::Instance().UpdateGong(diff); }
 
     void OnAfterConfigLoad(bool reload) override
     {
@@ -651,6 +656,7 @@ public:
 void AddSC_aq_war_effort()
 {
     AQWarEffort::RegisterScarabWallScripts();
+    AQWarEffort::RegisterScarabGongScripts();
     new aq_war_effort_world();
     new aq_war_effort_player();
     new aq_war_effort_events();
