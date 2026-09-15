@@ -299,6 +299,7 @@ void Manager::Initialize()
     LOG_INFO("module", "AQWarEffort: Loaded campaign ID {}, phase {}, tracking {}", _id,
         PhaseName(_campaign.Phase), _enabled ? "enabled" : "disabled");
     SyncCollectionEvent();
+    SyncWall();
 }
 
 bool Manager::ReadCampaign(Campaign& campaign) const
@@ -366,11 +367,14 @@ bool Manager::Persist(Campaign const& next)
         SyncCollectionEvent();
         return false;
     }
-    if (_campaign.Phase != next.Phase)
+    bool phaseChanged = _campaign.Phase != next.Phase;
+    if (phaseChanged)
         LOG_INFO("module", "AQWarEffort: Campaign ID {} transitioned {} -> {}", _id,
             PhaseName(_campaign.Phase), PhaseName(next.Phase));
     _campaign = next;
     SyncCollectionEvent();
+    if (phaseChanged)
+        SyncWall();
     return true;
 }
 
@@ -381,6 +385,7 @@ bool Manager::SetPhase(AQCampaignPhase phase)
     if (phase == _campaign.Phase)
     {
         SyncCollectionEvent();
+        SyncWall();
         return true;
     }
     Campaign next = _campaign;
@@ -645,6 +650,7 @@ public:
 
 void AddSC_aq_war_effort()
 {
+    AQWarEffort::RegisterScarabWallScripts();
     new aq_war_effort_world();
     new aq_war_effort_player();
     new aq_war_effort_events();

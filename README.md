@@ -7,7 +7,8 @@ The current foundation tracks all 15 Alliance and 15 Horde War Effort materials,
 recognizes initial and repeatable resource quests, and reports totals through
 quartermasters and administrator commands. Campaign state and contributions are
 persisted together on every accepted turn-in. No collection or READY countdown
-exists.
+exists. The stock Scarab Wall is now phase-controlled; see
+[Scarab Wall installation and tests](docs/SCARAB_WALL.md).
 
 ## Installation
 
@@ -18,6 +19,7 @@ exists.
    databases (or use the core's configured module SQL updater):
    - Characters: `data/sql/db-characters/base/001_aq_war_effort.sql`
    - World: `data/sql/db-world/base/001_aq_war_effort_quartermasters.sql`
+   - World: `data/sql/db-world/base/002_aq_scarab_wall.sql` (also apply to existing installs)
 3. Regenerate your existing AzerothCore build, then build worldserver:
    ```sh
    cmake -S /path/to/azerothcore-wotlk -B /path/to/build -DMODULES=static
@@ -86,10 +88,10 @@ OnPlayerCompleteQuest hook is invoked from Player::RewardQuest, after reward.
 | Value | Phase | Current behavior |
 |---|---|---|
 | 0 | DISABLED | Administratively inactive; no contributions counted. |
-| 1 | WAR_EFFORT | Material collection active indefinitely. |
-| 2 | READY | All resources collected; waits indefinitely. |
-| 3 | TEN_HOUR_WAR | Stored phase only; lifecycle is future work. |
-| 4 | OPEN | Stored completed state; gate control is future work. |
+| 1 | WAR_EFFORT | Material collection active indefinitely; wall closed. |
+| 2 | READY | All resources collected; waits indefinitely with wall closed. |
+| 3 | TEN_HOUR_WAR | Wall absent; timed lifecycle is future work. |
+| 4 | OPEN | Stored completed state; wall absent. |
 
 Only WAR_EFFORT accepts contributions, and only while the config is enabled.
 Other phases do not block quest rewards; those rewards do not alter campaign
@@ -145,7 +147,7 @@ re-entry replaces the corresponding timestamp. No timer uses these fields yet.
 | `.aqwareffort phase effort` | Administrator | Set WAR_EFFORT. |
 | `.aqwareffort phase ready` | Administrator | Set READY. |
 | `.aqwareffort phase war` | Administrator | Set TEN_HOUR_WAR; does not start an event. |
-| `.aqwareffort phase open` | Administrator | Set OPEN; does not open gates. |
+| `.aqwareffort phase open` | Administrator | Set OPEN; wall becomes absent without ceremony. |
 
 All commands support console use. Missing/invalid/extra phase arguments print
 usage. Changes report previous and new phase. Admin state overrides remain
@@ -155,8 +157,9 @@ available with the config disabled, provided campaign data loaded successfully.
 
 Quest 8743 (Bang a Gong!) is recognized and logged, but has no phase, spawn or
 availability effect. No gong boolean or duplicate campaign state is maintained.
-No Scarab Wall objects, AQ20/AQ40 AreaTriggers, opening animations/sounds, visual
-supply piles, event armies, crystals, loot, or ten-hour timers are installed.
+The three stock Scarab Wall objects are restored and phase-controlled. No
+AQ20/AQ40 AreaTrigger changes, opening animations/sounds, visual supply piles,
+event armies, crystals, loot, or ten-hour timers are installed.
 Only the stock resource collection event (22) is synchronized, not battle events.
 
 [AzerothCore mod-war-effort](https://github.com/azerothcore/mod-war-effort) is the
@@ -175,8 +178,8 @@ Legacy permanent spawns, helper shell scripts and unfinished visual code are
 intentionally excluded.
 
 Planned lifecycle: WAR_EFFORT → READY → valid Scepter bearer rings gong →
-TEN_HOUR_WAR → ten restart-safe real hours → OPEN. Scarab Wall and event lifecycle
-implementation are future milestones.
+TEN_HOUR_WAR → ten restart-safe real hours → OPEN. The ordered wall opening ceremony and event lifecycle
+remain future milestones.
 
 The original repository's MIT license and copyright are retained alongside the
 new repository's MIT notice in LICENSE. Source/config files retain the reference's

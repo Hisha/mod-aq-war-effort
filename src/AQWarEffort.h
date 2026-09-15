@@ -63,6 +63,8 @@ namespace AQWarEffort
         bool operator==(Campaign const&) const = default;
     };
 
+    void RegisterScarabWallScripts();
+
     class Manager
     {
     public:
@@ -80,6 +82,7 @@ namespace AQWarEffort
         bool SetPhase(AQCampaignPhase phase);
         void OnQuestReward(Player* player, Quest const* quest);
         void SyncCollectionEvent();
+        void SyncWall();
 
     private:
         Manager() = default;
