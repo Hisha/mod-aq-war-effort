@@ -14,7 +14,7 @@
 #                     1 - Enabled
 #
 
-AQWarEffort.Enable = 0
+AQWarEffort.Enable = 1
 
 #
 #    AQWarEffort.Id
