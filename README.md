@@ -13,6 +13,10 @@ now accepts the stock finale in READY and opens those same wall spawns; see
 [Scarab Gong installation, recovery and live tests](docs/SCARAB_GONG.md).
 The restart-safe war duration now advances TEN_HOUR_WAR to OPEN; see
 [Ten Hour War timing and live tests](docs/TEN_HOUR_WAR_TIMER.md).
+A separate content controller now reconciles one temporary stock red crystal
+outside the wall during an active war; see
+[content inventory, lifecycle and live tests](docs/TEN_HOUR_WAR_CONTENT.md).
+This proof requires no additional SQL and adds no battles or rewards.
 
 ## Installation
 

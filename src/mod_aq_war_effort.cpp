@@ -5,6 +5,7 @@
  * Resource mappings and quartermaster text adapted from AzerothCore mod-war-effort.
  */
 #include "AQWarEffort.h"
+#include "AQWarContent.h"
 #include "Chat.h"
 #include "Config.h"
 #include "CommandScript.h"
@@ -397,6 +398,29 @@ std::string Manager::WarTimeStatus() const
         + "\nTimer origin: " + (gong ? "Scarab Gong" : "Administrative phase start");
 }
 
+WarContentState Manager::GetWarContentState() const
+{
+    std::lock_guard lock(_mutex);
+    WarContentState state;
+    state.CampaignId = _id;
+    state.Phase = _campaign.Phase;
+    state.Managed = _enabled && _loaded;
+    state.Duration = _warDuration;
+    if (state.Phase != AQ_PHASE_TEN_HOUR_WAR)
+        return state;
+    // Same origin semantics as the proven timer; no spawn-specific persistence.
+    state.Origin = _campaign.GongRungAt && _campaign.GongRungAt == _campaign.PhaseStartedAt
+        ? _campaign.GongRungAt : _campaign.PhaseStartedAt;
+    std::time_t now = std::time(nullptr);
+    state.TimingValid = state.Origin && state.Duration && now >= 0;
+    if (state.TimingValid)
+    {
+        state.Elapsed = uint64(now) >= state.Origin ? uint64(now) - state.Origin : 0;
+        state.Remaining = state.Elapsed >= state.Duration ? 0 : state.Duration - state.Elapsed;
+    }
+    return state;
+}
+
 void Manager::EnterPhase(Campaign& campaign, AQCampaignPhase phase)
 {
     campaign.Phase = phase;
@@ -577,12 +601,15 @@ public:
     void OnStartup() override
     {
         Manager::Instance().Initialize();
+        WarContentController::Instance().Reconcile(Manager::Instance().GetWarContentState(), true);
     }
 
     void OnUpdate(uint32 diff) override
     {
         Manager::Instance().UpdateGong(diff);
         Manager::Instance().ReconcileWarTime();
+        // World thread, after timer convergence and after map/session workers join.
+        WarContentController::Instance().Reconcile(Manager::Instance().GetWarContentState());
     }
 
     void OnAfterConfigLoad(bool reload) override

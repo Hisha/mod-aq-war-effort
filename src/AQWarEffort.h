@@ -69,6 +69,8 @@ namespace AQWarEffort
     void RegisterScarabWallScripts();
     void RegisterScarabGongScripts();
 
+    struct WarContentState;
+
     class Manager
     {
     public:
@@ -77,6 +79,7 @@ namespace AQWarEffort
         void LoadWarDuration();
         void ReconcileWarTime();
         std::string WarTimeStatus() const;
+        WarContentState GetWarContentState() const;
         static std::string FormatDuration(uint64 seconds);
         bool IsEnabled() const { std::lock_guard lock(_mutex); return _enabled; }
         bool IsAvailable() const { std::lock_guard lock(_mutex); return _loaded; }
