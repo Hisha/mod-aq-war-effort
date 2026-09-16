@@ -22,6 +22,7 @@
 #include "WorldScript.h"
 #include <charconv>
 #include <ctime>
+#include <iomanip>
 #include <limits>
 #include <sstream>
 
@@ -247,6 +248,7 @@ void Manager::Initialize()
 {
     std::lock_guard lock(_mutex);
     _loaded = false;
+    LoadWarDuration();
     _enabled = sConfigMgr->GetOption<bool>("AQWarEffort.Enable", false);
     _id = sConfigMgr->GetOption<uint32>("AQWarEffort.Id", 1);
     _initialized = true;
@@ -298,6 +300,7 @@ void Manager::Initialize()
     }
     _loaded = true;
     InitializeGong();
+    ReconcileWarTime();
     LOG_INFO("module", "AQWarEffort: Loaded campaign ID {}, phase {}, tracking {}", _id,
         PhaseName(_campaign.Phase), _enabled ? "enabled" : "disabled");
     SyncCollectionEvent();
@@ -329,6 +332,69 @@ bool Manager::ReadCampaign(Campaign& campaign) const
         }
     } while (result->NextRow());
     return true;
+}
+
+void Manager::LoadWarDuration()
+{
+    std::lock_guard lock(_mutex);
+    std::string configured = sConfigMgr->GetOption<std::string>("AQWarEffort.TenHourWar.Duration", "36000");
+    uint32 duration = 0;
+    auto parsed = std::from_chars(configured.data(), configured.data() + configured.size(), duration);
+    if (parsed.ec != std::errc() || parsed.ptr != configured.data() + configured.size() || !duration)
+    {
+        _warDuration = 0;
+        LOG_ERROR("module", "AQWarEffort: Invalid TenHourWar.Duration '{}': expected 1..4294967295 seconds. "
+            "Automatic war expiration disabled until corrected and reloaded/restarted.", configured);
+        return;
+    }
+    _warDuration = duration;
+}
+
+void Manager::ReconcileWarTime()
+{
+    std::lock_guard lock(_mutex);
+    if (!_enabled || !_loaded || !_warDuration || _gongPending || _campaign.Phase != AQ_PHASE_TEN_HOUR_WAR)
+        return;
+    // Accepted gong transitions set both timestamps together. A later administrative
+    // war keeps the historical gong timestamp and gets a new phase start instead.
+    uint64 origin = _campaign.GongRungAt && _campaign.GongRungAt == _campaign.PhaseStartedAt
+        ? _campaign.GongRungAt : _campaign.PhaseStartedAt;
+    std::time_t now = std::time(nullptr);
+    // Missing/future timestamps cannot underflow into instant expiration. No deadline addition can overflow.
+    if (!origin || now < 0 || uint64(now) < origin || uint64(now) - origin < _warDuration)
+        return;
+    // Existing transition cancels any unfinished presentation, persists/read-verifies
+    // OPEN and opened_at, preserves supplies/history, and reconciles the owned wall.
+    SetPhase(AQ_PHASE_OPEN);
+}
+
+std::string Manager::FormatDuration(uint64 seconds)
+{
+    std::ostringstream text;
+    text << std::setfill('0') << std::setw(2) << seconds / 3600 << ':'
+        << std::setw(2) << (seconds / 60) % 60 << ':' << std::setw(2) << seconds % 60;
+    return text.str();
+}
+
+std::string Manager::WarTimeStatus() const
+{
+    std::lock_guard lock(_mutex);
+    if (!_loaded || _campaign.Phase != AQ_PHASE_TEN_HOUR_WAR)
+        return "";
+    if (!_enabled)
+        return "Ten Hour War timing inactive: module disabled.";
+    if (!_warDuration)
+        return "Ten Hour War timing disabled: invalid AQWarEffort.TenHourWar.Duration.";
+    bool gong = _campaign.GongRungAt && _campaign.GongRungAt == _campaign.PhaseStartedAt;
+    uint64 origin = gong ? _campaign.GongRungAt : _campaign.PhaseStartedAt;
+    if (!origin)
+        return "Ten Hour War timing unavailable: missing persisted phase start; inspect campaign data.";
+    std::time_t now = std::time(nullptr);
+    uint64 elapsed = now >= 0 && uint64(now) >= origin ? uint64(now) - origin : 0;
+    uint64 remaining = elapsed >= _warDuration ? 0 : _warDuration - elapsed;
+    return "Ten Hour War duration: " + FormatDuration(_warDuration)
+        + "\nElapsed: " + FormatDuration(elapsed) + "\nRemaining: " + FormatDuration(remaining)
+        + "\nTimer origin: " + (gong ? "Scarab Gong" : "Administrative phase start");
 }
 
 void Manager::EnterPhase(Campaign& campaign, AQCampaignPhase phase)
@@ -513,12 +579,21 @@ public:
         Manager::Instance().Initialize();
     }
 
-    void OnUpdate(uint32 diff) override { Manager::Instance().UpdateGong(diff); }
+    void OnUpdate(uint32 diff) override
+    {
+        Manager::Instance().UpdateGong(diff);
+        Manager::Instance().ReconcileWarTime();
+    }
 
     void OnAfterConfigLoad(bool reload) override
     {
         if (reload)
-            LOG_INFO("module", "AQWarEffort: Settings remain unchanged until worldserver restart.");
+        {
+            Manager::Instance().LoadWarDuration();
+            Manager::Instance().ReconcileWarTime();
+            LOG_INFO("module", "AQWarEffort: TenHourWar.Duration reloaded; "
+                "other settings remain unchanged until worldserver restart.");
+        }
     }
 };
 
@@ -631,6 +706,9 @@ public:
         handler->PSendSysMessage("Alliance supplies: {}", manager.IsComplete(TEAM_ALLIANCE) ? "complete" : "incomplete");
         handler->PSendSysMessage("Horde supplies: {}", manager.IsComplete(TEAM_HORDE) ? "complete" : "incomplete");
         handler->PSendSysMessage("Overall supplies: {}", manager.IsComplete() ? "complete" : "incomplete");
+        std::string timing = manager.WarTimeStatus();
+        if (!timing.empty())
+            handler->SendSysMessage(timing);
         return true;
     }
 

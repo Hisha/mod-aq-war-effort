@@ -1,8 +1,9 @@
 # Scarab Gong and opening ceremony
 
 This milestone adds one authorized questgiver gong and the live wall-opening
-presentation. It does not implement a ten-hour timer, automatic OPEN transition,
-battle content, Jonathan/Rajaxx, area triggers, barriers, or quest 8519 changes.
+presentation. The later [timing milestone](TEN_HOUR_WAR_TIMER.md) adds automatic
+OPEN after the configured real-time duration. Battle content, Jonathan/Rajaxx,
+area triggers, barriers and quest 8519 changes remain excluded.
 
 ## Installation and ownership
 
@@ -132,7 +133,9 @@ All timing is centralized in `PartAnimationMs`, `CeremonyDurationMs` and the
 
 Each part loses collision as its opening stage begins. Following parts continue
 to block until their stage. Phase is TEN_HOUR_WAR throughout presentation and
-remains there afterward. No timer advances it to OPEN. Sounds use PlayDistanceSound
+remains there until its configured war deadline. Use a duration above 12 seconds
+to observe the entire presentation; expiration uses the existing immediate OPEN
+transition. Sounds use PlayDistanceSound
 on the corresponding object, not realm-wide playback. Large server stalls may
 cross several stage boundaries in one update; the controller converges to elapsed
 time rather than prolonging a stalled ceremony.

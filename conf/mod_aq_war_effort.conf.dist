@@ -62,8 +62,15 @@ AQWarEffort.Goal.Alliance.Leather.01 = 1000
 AQWarEffort.Goal.Alliance.Leather.02 = 2000
 AQWarEffort.Goal.Alliance.Leather.03 = 3000
 
-# All settings are loaded at startup; restart after editing.
+# Settings other than TenHourWar.Duration require restart after editing.
 # Each goal must be at least one full turn-in and an exact multiple of its quantity.
 # Defaults are one/two/three turn-ins: 20/40/60 items, or 10/20/30 for leather.
 # Invalid goals stop tracking and collection event 22 until corrected and restarted.
 # Configure production goals before enabling. Only WAR_EFFORT accepts contributions.
+
+# Real seconds from the persisted current gong/administrative war start.
+# Reloadable with .reload config. Changes apply to the ORIGINAL start, not reload time;
+# shortening can immediately expire an active war. Offline time counts too.
+# Valid integers: 1..4294967295. Invalid values disable automatic expiration only.
+# Default: 36000 (10 hours). For development: 300 (5 minutes).
+AQWarEffort.TenHourWar.Duration = 36000

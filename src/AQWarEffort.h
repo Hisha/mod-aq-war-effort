@@ -74,6 +74,10 @@ namespace AQWarEffort
     public:
         static Manager& Instance();
         void Initialize();
+        void LoadWarDuration();
+        void ReconcileWarTime();
+        std::string WarTimeStatus() const;
+        static std::string FormatDuration(uint64 seconds);
         bool IsEnabled() const { std::lock_guard lock(_mutex); return _enabled; }
         bool IsAvailable() const { std::lock_guard lock(_mutex); return _loaded; }
         uint32 GetId() const { return _id; }
@@ -121,6 +125,7 @@ namespace AQWarEffort
         bool _enabled{ false };
         bool _loaded{ false };
         uint32 _id{ 1 };
+        uint32 _warDuration{ 36000 };
         Campaign _campaign;
         std::array<std::array<uint64, MaterialCount>, FactionCount> _goals{};
     };

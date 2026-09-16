@@ -11,6 +11,8 @@ exists. The stock Scarab Wall is now phase-controlled; see
 [Scarab Wall installation and tests](docs/SCARAB_WALL.md). The authorized Scarab Gong
 now accepts the stock finale in READY and opens those same wall spawns; see
 [Scarab Gong installation, recovery and live tests](docs/SCARAB_GONG.md).
+The restart-safe war duration now advances TEN_HOUR_WAR to OPEN; see
+[Ten Hour War timing and live tests](docs/TEN_HOUR_WAR_TIMER.md).
 
 ## Installation
 
@@ -59,8 +61,11 @@ The only template is `conf/mod_aq_war_effort.conf.dist`.
   thirty goals measured in item quantities. These are three material requirements,
   not five visual progression thresholds.
 
-All settings are read at startup and require restart after changes. Config reload
-logs this requirement and does not switch campaigns or partially reload goals.
+`AQWarEffort.TenHourWar.Duration` defaults to 36000 real seconds and supports
+`.reload config`. The new duration applies against the original persisted war start;
+shortening it can immediately advance an existing war to OPEN. Invalid durations
+disable automatic expiration only. All other settings require restart; config reload
+does not switch campaigns or partially reload goals.
 Defaults are one/two/three full turn-ins: 20/40/60 for non-leather and 10/20/30
 for leather. Each goal must be at least one turn-in and an exact multiple of its
 quantity. Zero, negative, malformed, overflowing and non-multiple values are
@@ -100,7 +105,7 @@ OnPlayerCompleteQuest hook is invoked from Player::RewardQuest, after reward.
 Only WAR_EFFORT accepts contributions, and only while the config is enabled.
 Other phases do not block collection quest rewards; those rewards do not alter campaign
 totals. A rewarded contribution that satisfies both factions atomically saves
-the totals and READY, logs the transition, and notifies the contributor. The gong can then advance READY to TEN_HOUR_WAR. There is no timed transition to OPEN. An administrator may override any
+the totals and READY, logs the transition, and notifies the contributor. The gong can then advance READY to TEN_HOUR_WAR. The configured real-time duration then advances TEN_HOUR_WAR to OPEN. An administrator may override any
 phase, including OPEN, without resetting material counts.
 
 Startup initializes absent faction rows without changing existing counts, then
@@ -139,18 +144,19 @@ Entering a different phase sets phase_started_at. Only a real, accepted 8743 gon
 reward sets gong_rung_at; administrative `phase war` preserves its previous value.
 Entering OPEN sets opened_at. Same-phase overrides preserve timestamps. Neither
 real gong acceptance nor an administrative return to TEN_HOUR_WAR changes opened_at.
-No timer uses these fields yet.
+The war timer uses the current gong timestamp when it equals phase_started_at;
+a later administrative war uses its own phase_started_at. Shutdown time counts.
 
 ## Commands
 
 | Command | Security | Result |
 |---|---|---|
-| `.aqwareffort status` | Moderator | ID, phase, availability, enabled state and supply completion. |
+| `.aqwareffort status` | Moderator | ID, phase, availability, enabled state, supplies and active war timing. |
 | `.aqwareffort scores` | Moderator | Both factions' detailed item totals and goals. |
 | `.aqwareffort phase disabled` | Administrator | Set DISABLED. |
 | `.aqwareffort phase effort` | Administrator | Set WAR_EFFORT. |
 | `.aqwareffort phase ready` | Administrator | Set READY. |
-| `.aqwareffort phase war` | Administrator | Set TEN_HOUR_WAR; does not start an event. |
+| `.aqwareffort phase war` | Administrator | Set TEN_HOUR_WAR; start its timer without fabricating a gong acceptance. |
 | `.aqwareffort phase open` | Administrator | Set OPEN; wall becomes absent without ceremony. |
 
 All commands support console use. Missing/invalid/extra phase arguments print
@@ -164,7 +170,7 @@ and achievement/quest history. The module authorizes one dedicated 180717 gong,
 persists READY -> TEN_HOUR_WAR with a durable recovery journal, and presents
 roots -> runes -> gate on its existing wall spawns. No AQ20/AQ40 AreaTrigger changes,
 quest 8519 changes, Jonathan/Rajaxx, visual supply piles, event armies, crystals,
-loot, or ten-hour timers are installed.
+or loot are installed. The war timer controls campaign state only.
 Only the stock resource collection event (22) is synchronized, not battle events.
 
 [AzerothCore mod-war-effort](https://github.com/azerothcore/mod-war-effort) is the
@@ -183,8 +189,8 @@ Legacy permanent spawns, helper shell scripts and unfinished visual code are
 intentionally excluded.
 
 Implemented lifecycle: WAR_EFFORT → READY → successful authorized gong reward →
-TEN_HOUR_WAR, including the ordered wall-opening ceremony. The ten-hour timer,
-battle content and automatic transition to OPEN remain future milestones.
+TEN_HOUR_WAR, including the ordered wall-opening ceremony → timed OPEN.
+Ten Hour War battle content remains a future milestone.
 
 The original repository's MIT license and copyright are retained alongside the
 new repository's MIT notice in LICENSE. Source/config files retain the reference's
