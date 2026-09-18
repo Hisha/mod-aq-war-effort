@@ -8,11 +8,13 @@
 #include "AQBattlefrontStage.h"
 #include "Creature.h"
 #include "DatabaseEnv.h"
+#include "Field.h"
 #include "GameObject.h"
 #include "Log.h"
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
+#include "QueryResult.h"
 #include "TemporarySummon.h"
 #include "UnitScript.h"
 #include <ctime>

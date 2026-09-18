@@ -12,6 +12,7 @@
 #include "Creature.h"
 #include "CreatureScript.h"
 #include "DatabaseEnv.h"
+#include "Field.h"
 #include "Log.h"
 #include "GameEventMgr.h"
 #include "GameEventScript.h"
@@ -19,6 +20,7 @@
 #include "Player.h"
 #include "PlayerScript.h"
 #include "QuestDef.h"
+#include "QueryResult.h"
 #include "ScriptedGossip.h"
 #include "WorldScript.h"
 #include <charconv>
