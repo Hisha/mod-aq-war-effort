@@ -260,7 +260,7 @@ void Manager::Initialize()
         return;
     }
     QueryResult version = CharacterDatabase.Query("SELECT material_data_version FROM aq_war_effort_schema WHERE id = 1");
-    if (!version || (*version)[0].Get<uint32>() != MaterialDataVersion)
+    if (!version || version->Fetch()[0].Get<uint32>() != MaterialDataVersion)
     {
         LOG_ERROR("module", "AQWarEffort: Material data version 2 required. Stop worldserver and apply the character update SQL.");
         SyncCollectionEvent();
@@ -284,9 +284,10 @@ void Manager::Initialize()
     }
     do
     {
-        uint8 faction = (*materials)[0].Get<uint8>();
+        Field* fields = materials->Fetch();
+        uint8 faction = fields[0].Get<uint8>();
         for (uint8 i = 0; i < MaterialCount; ++i)
-            initial.Contributions[faction][i] = (*materials)[i + 1].Get<uint64>();
+            initial.Contributions[faction][i] = fields[i + 1].Get<uint64>();
     } while (materials->NextRow());
 
     EnterPhase(initial, IsComplete(initial, TEAM_ALLIANCE) && IsComplete(initial, TEAM_HORDE)
@@ -317,18 +318,22 @@ bool Manager::ReadCampaign(Campaign& campaign) const
         "m.herbs01, m.herbs02, m.herbs03, m.metals01, m.metals02, m.metals03, "
         "m.leather01, m.leather02, m.leather03 FROM aq_war_effort_campaign c "
         "JOIN aq_war_effort m ON m.id = c.id WHERE c.id = {} AND m.faction IN (0, 1) ORDER BY m.faction", _id);
-    if (!result || result->GetRowCount() != FactionCount || (*result)[0].Get<uint8>() > AQ_PHASE_OPEN)
+    if (!result || result->GetRowCount() != FactionCount)
         return false;
-    campaign.Phase = AQCampaignPhase((*result)[0].Get<uint8>());
-    campaign.PhaseStartedAt = (*result)[1].Get<uint64>();
-    campaign.GongRungAt = (*result)[2].Get<uint64>();
-    campaign.OpenedAt = (*result)[3].Get<uint64>();
+    Field* fields = result->Fetch();
+    if (fields[0].Get<uint8>() > AQ_PHASE_OPEN)
+        return false;
+    campaign.Phase = AQCampaignPhase(fields[0].Get<uint8>());
+    campaign.PhaseStartedAt = fields[1].Get<uint64>();
+    campaign.GongRungAt = fields[2].Get<uint64>();
+    campaign.OpenedAt = fields[3].Get<uint64>();
     do
     {
-        uint8 faction = (*result)[4].Get<uint8>();
+        fields = result->Fetch();
+        uint8 faction = fields[4].Get<uint8>();
         for (uint8 i = 0; i < MaterialCount; ++i)
         {
-            uint64 count = (*result)[i + 5].Get<uint64>();
+            uint64 count = fields[i + 5].Get<uint64>();
             campaign.Contributions[faction][i] = count;
         }
     } while (result->NextRow());
@@ -472,7 +477,7 @@ bool Manager::Persist(Campaign const& next, bool gongAcceptance)
     if (gongAcceptance)
         journal = CharacterDatabase.Query("SELECT accepted FROM aq_war_effort_gong WHERE id = {}", _id);
     if (!ReadCampaign(persisted) || !(persisted == next)
-        || (gongAcceptance && (!journal || !(*journal)[0].Get<bool>())))
+        || (gongAcceptance && (!journal || !journal->Fetch()[0].Get<bool>())))
     {
         _loaded = false;
         LOG_ERROR("module", "AQWarEffort: Campaign ID {} write could not be verified. Tracking stopped; inspect DB and restart.", _id);

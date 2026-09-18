@@ -133,7 +133,7 @@ void Manager::InitializeGong()
         return;
     }
     _gongHealthy = true;
-    if ((*schema)[0].Get<uint64>())
+    if (schema->Fetch()[0].Get<uint64>())
     {
         QueryResult intent = CharacterDatabase.Query(
             "SELECT player_guid, accepted FROM aq_war_effort_gong WHERE id = {}", _id);
@@ -142,8 +142,9 @@ void Manager::InitializeGong()
             _gongHealthy = false;
             return;
         }
-        _gongPlayer = (*intent)[0].Get<uint32>();
-        _gongPending = !(*intent)[1].Get<bool>();
+        Field* fields = intent->Fetch();
+        _gongPlayer = fields[0].Get<uint32>();
+        _gongPending = !fields[1].Get<bool>();
     }
     // No live observation on startup: recovery can open the wall, never replay presentation.
     UpdateGong(0);
@@ -168,8 +169,9 @@ bool Manager::PrepareGong(Player* player, GameObject* go)
         playerId, _id, uint32(AQ_PHASE_READY), _campaign.PhaseStartedAt, playerId, QuestBangGong);
     QueryResult check = CharacterDatabase.Query(
         "SELECT player_guid, ready_started_at, accepted FROM aq_war_effort_gong WHERE id = {}", _id);
-    if (!check || (*check)[0].Get<uint32>() != playerId
-        || (*check)[1].Get<uint64>() != _campaign.PhaseStartedAt || (*check)[2].Get<bool>())
+    Field* fields = check ? check->Fetch() : nullptr;
+    if (!fields || fields[0].Get<uint32>() != playerId
+        || fields[1].Get<uint64>() != _campaign.PhaseStartedAt || fields[2].Get<bool>())
     {
         _gongHealthy = false;
         LOG_ERROR("module", "AQWarEffort: Cannot verify gong intent for campaign {}; reward blocked until restart.", _id);
@@ -209,13 +211,14 @@ void Manager::UpdateGong(uint32 diff)
         LOG_ERROR("module", "AQWarEffort: Gong recovery read failed; restart after repairing the database.");
         return;
     }
-    if (_campaign.Phase != AQ_PHASE_READY || (*result)[0].Get<uint64>() != _campaign.PhaseStartedAt)
+    Field* fields = result->Fetch();
+    if (_campaign.Phase != AQ_PHASE_READY || fields[0].Get<uint64>() != _campaign.PhaseStartedAt)
     {
         _gongHealthy = false;
         LOG_ERROR("module", "AQWarEffort: Pending gong belongs to another campaign phase; administrator review required.");
         return;
     }
-    if (!(*result)[1].Get<bool>())
+    if (!fields[1].Get<bool>())
     {
         if (_gongObserved)
             return; // Wait for the core's asynchronous reward save. Never discard successful live evidence.
@@ -223,7 +226,7 @@ void Manager::UpdateGong(uint32 diff)
         // At startup, an absent rewarded row means the interrupted attempt did not durably succeed.
         CharacterDatabase.DirectExecute("DELETE FROM aq_war_effort_gong WHERE id = {} AND accepted = 0", _id);
         QueryResult cleared = CharacterDatabase.Query("SELECT COUNT(*) FROM aq_war_effort_gong WHERE id = {}", _id);
-        if (!cleared || (*cleared)[0].Get<uint64>())
+        if (!cleared || cleared->Fetch()[0].Get<uint64>())
         {
             _gongHealthy = false;
             return;
