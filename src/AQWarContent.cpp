@@ -72,7 +72,11 @@ bool WarContentController::PersistBossKill(uint32 campaignId, uint64 origin, uin
         "SELECT COUNT(*) FROM aq_war_effort_boss_kill "
         "WHERE campaign_id = {} AND war_started_at = {} AND boss_id = {}",
         campaignId, origin, entry);
-    return result && (*result)[0].Get<uint64>() == 1;
+	if (!result)
+	    return false;
+
+	Field* fields = result->Fetch();
+	return fields[0].Get<uint64>() == 1;
 }
 
 void WarContentController::RetryBossKills()
@@ -137,7 +141,8 @@ WarContentController::BossState WarContentController::GetBossState(WarContentSta
         return BossState::Unknown;
     }
     _bossLoadFailureLogged = false;
-    return resultState = (*result)[0].Get<uint64>() ? BossState::Defeated : BossState::Alive;
+	Field* fields = result->Fetch();
+	return resultState = fields[0].Get<uint64>() ? BossState::Defeated : BossState::Alive;
 }
 
 void WarContentController::OnOwnedBossDeath(Creature const* creature, WarContentState const& state)
