@@ -6,14 +6,19 @@
 #define MOD_AQ_WAR_CONTENT_H
 
 #include "AQWarEffort.h"
+#include "AQNamedWarBoss.h"
 #include "ObjectGuid.h"
 #include <array>
 #include <chrono>
+#include <mutex>
+#include <vector>
 
 class Map;
+class Creature;
 
 namespace AQWarEffort
 {
+    void RegisterWarContentScripts();
     // A coherent read-only view of the persisted campaign and current timing policy.
     // Later scenes can select stages with Progress(), independent of real-hour lengths.
     struct WarContentState
@@ -47,6 +52,7 @@ namespace AQWarEffort
     public:
         static WarContentController& Instance();
         void Reconcile(WarContentState const& state, bool startup = false);
+        void OnOwnedBossDeath(Creature const* creature, WarContentState const& state);
 
     private:
         WarContentController() = default;
@@ -55,6 +61,17 @@ namespace AQWarEffort
         void Cleanup();
         void ReconcileAshi(WarContentState const& state, Map* map);
         void CleanupAshi(Map* map);
+        enum class BossState : uint8 { Unknown, Alive, Defeated };
+        BossState GetBossState(WarContentState const& state, uint32 entry);
+        void RetryBossKills();
+        bool PersistBossKill(uint32 campaignId, uint64 origin, uint32 entry, uint64 killedAt);
+        struct PendingBossKill
+        {
+            uint32 CampaignId;
+            uint64 Origin;
+            uint32 Entry;
+            uint64 KilledAt;
+        };
         struct BattlefrontSlot
         {
             ObjectGuid Guid;
@@ -68,6 +85,15 @@ namespace AQWarEffort
             bool FailureLogged{ false };
         };
         Battlefront _ashi;
+        std::mutex _bossMutex;
+        uint32 _bossCampaignId{ 0 };
+        uint64 _bossOrigin{ 0 };
+        std::array<BossState, 3> _bossStates{};
+        std::vector<PendingBossKill> _pendingBossKills;
+        std::chrono::steady_clock::time_point _nextBossLoad{};
+        std::chrono::steady_clock::time_point _nextBossWrite{};
+        bool _bossLoadFailureLogged{ false };
+        bool _bossWriteFailureLogged{ false };
         ObjectGuid _crystal;
         uint32 _campaignId{ 0 };
         uint64 _origin{ 0 };

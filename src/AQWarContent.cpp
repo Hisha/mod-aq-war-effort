@@ -7,12 +7,15 @@
 #include "AQWarContent.h"
 #include "AQBattlefrontStage.h"
 #include "Creature.h"
+#include "DatabaseEnv.h"
 #include "GameObject.h"
 #include "Log.h"
 #include "Map.h"
 #include "MapMgr.h"
 #include "ObjectMgr.h"
 #include "TemporarySummon.h"
+#include "UnitScript.h"
+#include <ctime>
 #include <iterator>
 
 namespace AQWarEffort
@@ -38,7 +41,7 @@ namespace
     };
     constexpr uint32 Drone = 15421;
     constexpr uint32 Warbringer = 15758;
-    constexpr uint32 AshiColossus = 15742;
+    constexpr uint32 AshiColossus = BOSS_COLOSSUS_ASHI;
     SpawnDefinition const AshiSpawns[] =
     {
         { Drone, { -6497.20f, 1021.79f, 0.38f, 4.00f }, 1 },
@@ -55,6 +58,112 @@ WarContentController& WarContentController::Instance()
 {
     static WarContentController instance;
     return instance;
+}
+
+bool WarContentController::PersistBossKill(uint32 campaignId, uint64 origin, uint32 entry, uint64 killedAt)
+{
+    // The natural key makes duplicate callbacks/retries harmless. DirectExecute
+    // is synchronous; its void API requires a read-back before claiming success.
+    CharacterDatabase.DirectExecute(
+        "INSERT INTO aq_war_effort_boss_kill (campaign_id, war_started_at, boss_id, killed_at) "
+        "VALUES ({}, {}, {}, {}) ON DUPLICATE KEY UPDATE boss_id = boss_id",
+        campaignId, origin, entry, killedAt);
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT COUNT(*) FROM aq_war_effort_boss_kill "
+        "WHERE campaign_id = {} AND war_started_at = {} AND boss_id = {}",
+        campaignId, origin, entry);
+    return result && (*result)[0].Get<uint64>() == 1;
+}
+
+void WarContentController::RetryBossKills()
+{
+    if (_pendingBossKills.empty())
+        return;
+    auto const now = std::chrono::steady_clock::now();
+    if (now < _nextBossWrite)
+        return;
+    _nextBossWrite = now + RetryDelay;
+    for (auto it = _pendingBossKills.begin(); it != _pendingBossKills.end();)
+    {
+        if (PersistBossKill(it->CampaignId, it->Origin, it->Entry, it->KilledAt))
+        {
+            LOG_INFO("module", "AQWarEffort: Named boss {} death durably recorded for campaign {}, war origin {}.",
+                it->Entry, it->CampaignId, it->Origin);
+            it = _pendingBossKills.erase(it);
+            _bossWriteFailureLogged = false;
+        }
+        else
+        {
+            if (!_bossWriteFailureLogged)
+                LOG_ERROR("module", "AQWarEffort: Could not verify named boss death in character DB. "
+                    "Boss stays defeated in this process; retrying persistence. A crash before recovery can lose this kill.");
+            _bossWriteFailureLogged = true;
+            ++it;
+        }
+    }
+}
+
+WarContentController::BossState WarContentController::GetBossState(WarContentState const& state, uint32 entry)
+{
+    if (!IsNamedWarBoss(entry) || !state.Active())
+        return BossState::Unknown;
+    if (_bossCampaignId != state.CampaignId || _bossOrigin != state.Origin)
+    {
+        _bossCampaignId = state.CampaignId;
+        _bossOrigin = state.Origin;
+        _bossStates.fill(BossState::Unknown);
+        _nextBossLoad = {};
+        _bossLoadFailureLogged = false;
+    }
+    BossState& resultState = _bossStates[entry - BOSS_COLOSSUS_ZORA];
+    for (PendingBossKill const& pending : _pendingBossKills)
+        if (pending.CampaignId == state.CampaignId && pending.Origin == state.Origin && pending.Entry == entry)
+            return resultState = BossState::Defeated;
+    if (resultState != BossState::Unknown)
+        return resultState;
+    auto const now = std::chrono::steady_clock::now();
+    if (now < _nextBossLoad)
+        return BossState::Unknown; // Fail closed; no unverified boss spawn.
+    _nextBossLoad = now + RetryDelay;
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT COUNT(*) FROM aq_war_effort_boss_kill "
+        "WHERE campaign_id = {} AND war_started_at = {} AND boss_id = {}",
+        state.CampaignId, state.Origin, entry);
+    if (!result)
+    {
+        if (!_bossLoadFailureLogged)
+            LOG_ERROR("module", "AQWarEffort: Cannot read named boss kills from character DB; boss spawning paused.");
+        _bossLoadFailureLogged = true;
+        return BossState::Unknown;
+    }
+    _bossLoadFailureLogged = false;
+    return resultState = (*result)[0].Get<uint64>() ? BossState::Defeated : BossState::Alive;
+}
+
+void WarContentController::OnOwnedBossDeath(Creature const* creature, WarContentState const& state)
+{
+    if (!creature || !IsNamedWarBoss(creature->GetEntry()) || !state.Active())
+        return;
+    std::lock_guard lock(_bossMutex);
+    if (!_active)
+        return;
+    // Only a GUID held by the current module-owned battlefront is eligible.
+    // Future fronts register their owned boss slots here, not by area or entry.
+    BattlefrontSlot const& slot = _ashi.Slots[std::size(AshiSpawns) - 1];
+    if (creature->GetEntry() != BOSS_COLOSSUS_ASHI
+        || !IsOwnedWarBossDeath(WarBossKey{ state.CampaignId, state.Origin, creature->GetEntry() },
+            WarBossKey{ _campaignId, _origin, BOSS_COLOSSUS_ASHI }, creature->GetGUID(),
+            slot.Guid, slot.Spawned, _ashi.Stage == 4))
+        return;
+    BossState& boss = _bossStates[BOSS_COLOSSUS_ASHI - BOSS_COLOSSUS_ZORA];
+    if (boss == BossState::Defeated)
+        return;
+    boss = BossState::Defeated; // Suppress locally even if the DB is unavailable.
+    std::time_t const now = std::time(nullptr);
+    _pendingBossKills.push_back({ state.CampaignId, state.Origin, BOSS_COLOSSUS_ASHI,
+        now > 0 ? uint64(now) : state.Origin });
+    _nextBossWrite = {};
+    RetryBossKills();
 }
 
 void WarContentController::Cleanup()
@@ -115,6 +224,8 @@ void WarContentController::ReconcileAshi(WarContentState const& state, Map* map)
         BattlefrontSlot& slot = _ashi.Slots[i];
         if (definition.FirstStage > stage || slot.Spawned)
             continue;
+        if (definition.Entry == AshiColossus && GetBossState(state, AshiColossus) != BossState::Alive)
+            continue;
         if (!sObjectMgr->GetCreatureTemplate(definition.Entry))
         {
             if (!_ashi.FailureLogged)
@@ -145,6 +256,8 @@ void WarContentController::ReconcileAshi(WarContentState const& state, Map* map)
 
 void WarContentController::Reconcile(WarContentState const& state, bool startup)
 {
+    std::lock_guard lock(_bossMutex);
+    RetryBossKills(); // Also flush deaths after phase cleanup or a new war epoch.
     bool desired = state.Active();
     if (_active && (!desired || state.CampaignId != _campaignId || state.Origin != _origin))
     {
@@ -211,5 +324,22 @@ void WarContentController::Reconcile(WarContentState const& state, bool startup)
         LOG_ERROR("module", "AQWarEffort: Could not create temporary war proof; "
             "retrying while campaign remains active.");
     _failureLogged = true;
+}
+
+class aq_named_war_boss_death : public UnitScript
+{
+public:
+    aq_named_war_boss_death() : UnitScript("aq_named_war_boss_death", true, { UNITHOOK_ON_UNIT_DEATH }) { }
+
+    void OnUnitDeath(Unit* unit, Unit* /*killer*/) override
+    {
+        if (Creature* creature = unit ? unit->ToCreature() : nullptr)
+            WarContentController::Instance().OnOwnedBossDeath(creature, Manager::Instance().GetWarContentState());
+    }
+};
+
+void RegisterWarContentScripts()
+{
+    new aq_named_war_boss_death();
 }
 }

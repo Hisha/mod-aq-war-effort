@@ -52,19 +52,17 @@ failed summon occur only for unfilled slots and at most every five seconds.
 No creature GUID, wave state, or stage is persisted. Stage and temporary ownership
 are local process state; campaign phase and timer remain persistent authority.
 
-When a summoned creature dies, its slot remains spent for that stage. The next
-stage refreshes all supporting actors. A killed Colossus stays defeated through
-stage 4 in that worldserver process; there is no stage 5 to replace it. A server
-restart during stage 4 summons it again because no durable defeat marker exists.
-This is the deliberate limitation of avoiding new campaign persistence here;
-if permanent post-kill suppression across restart becomes a requirement, add a
-campaign-scoped defeated flag transaction before implementing Regal/Zora.
+When a summoned ordinary creature dies, its slot remains spent for that stage;
+the next stage refreshes supporting actors. The module-owned Colossus death is
+recorded under campaign ID and war timer origin. A restart in the same war
+recovers that row and keeps Ashi absent. A new war origin allows a new Ashi.
+See `NAMED_WAR_BOSS_KILLS.md` for the durable death and failure rules.
 
 Leaving TEN_HOUR_WAR for OPEN, READY, WAR_EFFORT or DISABLED despawns only owned
 GUIDs and resets the battlefront. OPEN startup leaves it absent. The existing
 crystal cleanup, wall, gong, timer, event 22, and collection logic are unchanged.
-No SQL changes, loot changes, or reward changes are included. Stock template
-behavior and loot apply to the selected creatures.
+The boss-kill character table is the only added SQL. Stock template behavior
+and loot apply to the selected creatures; no loot or reward change is included.
 
 ## Build and live verification
 
@@ -94,13 +92,13 @@ With `AQWarEffort.TenHourWar.Duration = 300`, use an isolated test campaign:
    placements from a normal character and check pathing/terrain/aggro.
 3. Kill a Drone, then the Colossus. Wait through several reconciliations: neither
    should instantly return in the same stage. A kill in stages 1–3 may return
-   on the next stage refresh. Do not assume stage-4 boss death survives restart.
+   on the next stage refresh. The stage-4 boss death must survive restart.
 4. Repeatedly run `.aqwareffort status` and observe for duplicate creatures or
    repetitive log lines. There should be at most six module actors at stage 4.
 5. For restart restoration, start a fresh 300-second war and stop at about 20%.
    Restart at about 55% elapsed: it must create stage 3 directly. Separately
    restart at about 60%: stage 3, no prior-stage replay. Restart in stage 4:
-   the Colossus appears once; note the documented defeat reset limitation.
+   the Colossus appears once if it was not defeated in that war.
 6. Issue `.aqwareffort phase open`, then repeat separate wars followed by
    `.aqwareffort phase ready`, `effort`, and `disabled`. Each transition must
    remove all owned Ashi actors and the crystal. Restart in OPEN: none return.
@@ -109,7 +107,8 @@ With `AQWarEffort.TenHourWar.Duration = 300`, use an isolated test campaign:
    offline. It should converge to OPEN with no Ashi actors. Restore production
    duration 36000 and repeat a stage-1 smoke test.
 8. Run the module's existing campaign, gong, wall and timer regression suite
-   in the deployment build. No world or character SQL migration is required.
+   in the deployment build. Apply the named-boss character SQL update on
+   existing installs before starting this build.
 
 The standalone stage test is `tests/test_battlefront_stage.cpp`; compile with
 `g++ -std=c++20 -I src tests/test_battlefront_stage.cpp -o test_stage` and run it.
@@ -119,7 +118,6 @@ run against the deployment checkout and realm; those resources were unavailable
 in the packaging workspace.
 
 Before extending the same slot model to Regal and Zora, validate Ashi encounter
-load/terrain with real players and Playerbots, review whether each battlefront
-needs a durable Colossus defeat marker, and decide whether localized patrols
-should replace stationary emergence positions. Keep the spawn sets independent
-and the shared ownership/stage mechanism small.
+load/terrain with real players and Playerbots, and decide whether localized
+patrols should replace stationary emergence positions. Keep the spawn sets
+independent and use the shared named-boss kill table and identity API.

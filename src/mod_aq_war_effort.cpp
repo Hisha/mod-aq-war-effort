@@ -786,6 +786,7 @@ void AddSC_aq_war_effort()
 {
     AQWarEffort::RegisterScarabWallScripts();
     AQWarEffort::RegisterScarabGongScripts();
+    AQWarEffort::RegisterWarContentScripts();
     new aq_war_effort_world();
     new aq_war_effort_player();
     new aq_war_effort_events();
