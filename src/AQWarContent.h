@@ -7,7 +7,10 @@
 
 #include "AQWarEffort.h"
 #include "ObjectGuid.h"
+#include <array>
 #include <chrono>
+
+class Map;
 
 namespace AQWarEffort
 {
@@ -50,6 +53,21 @@ namespace AQWarEffort
         WarContentController(WarContentController const&) = delete;
         WarContentController& operator=(WarContentController const&) = delete;
         void Cleanup();
+        void ReconcileAshi(WarContentState const& state, Map* map);
+        void CleanupAshi(Map* map);
+        struct BattlefrontSlot
+        {
+            ObjectGuid Guid;
+            bool Spawned{ false }; // A dead/despawned summon stays spent for this stage.
+        };
+        struct Battlefront
+        {
+            uint8 Stage{ 0 };
+            std::array<BattlefrontSlot, 8> Slots{};
+            std::chrono::steady_clock::time_point NextAttempt{};
+            bool FailureLogged{ false };
+        };
+        Battlefront _ashi;
         ObjectGuid _crystal;
         uint32 _campaignId{ 0 };
         uint64 _origin{ 0 };
