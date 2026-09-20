@@ -1,5 +1,9 @@
 # Hive'Ashi Ten Hour War battlefront
 
+The subsequent [Hive'Regal milestone](HIVE_REGAL_BATTLEFRONT.md) moves this exact
+Ashi roster into shared battlefront data. Ashi stage/death behavior is unchanged;
+both fronts now reconcile independently from the same campaign clock.
+
 ## Data inventory and scope
 
 Sources inspected: this module's `AQWarContent.*`, its timer and previous content

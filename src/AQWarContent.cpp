@@ -31,29 +31,6 @@ namespace
     // placement for the crystal, not a historical crystal spawn from warevent.sql.
     Position const CrystalPosition{ -8088.0f, 1530.0f, 2.61f, 0.0f };
     constexpr auto RetryDelay = std::chrono::seconds(5);
-
-    // The old warevent.sql places 15742 at the Hive'Ashi mouth. Its later
-    // waypoint coordinates jump across the continent, so none are imported.
-    // Slots are a small scene, not database spawn GUIDs or a wave backlog.
-    struct SpawnDefinition
-    {
-        uint32 Entry;
-        Position Location;
-        uint8 FirstStage;
-    };
-    constexpr uint32 Drone = 15421;
-    constexpr uint32 Warbringer = 15758;
-    constexpr uint32 AshiColossus = BOSS_COLOSSUS_ASHI;
-    SpawnDefinition const AshiSpawns[] =
-    {
-        { Drone, { -6497.20f, 1021.79f, 0.38f, 4.00f }, 1 },
-        { Drone, { -6540.54f, 985.64f, 0.38f, 3.59f }, 1 },
-        { Drone, { -6704.02f, 899.43f, -1.39f, 4.24f }, 2 },
-        { Warbringer, { -6610.06f, 924.65f, 0.37f, 3.08f }, 2 },
-        { Warbringer, { -6669.62f, 922.71f, -0.69f, 3.68f }, 3 },
-        { AshiColossus, { -6458.70f, 1076.01f, -2.90f, 4.05f }, 4 }
-    };
-
 }
 
 WarContentController& WarContentController::Instance()
@@ -118,31 +95,32 @@ WarContentController::BossState WarContentController::GetBossState(WarContentSta
         _bossCampaignId = state.CampaignId;
         _bossOrigin = state.Origin;
         _bossStates.fill(BossState::Unknown);
-        _nextBossLoad = {};
-        _bossLoadFailureLogged = false;
+        _nextBossLoad.fill({});
+        _bossLoadFailureLogged.fill(false);
     }
-    BossState& resultState = _bossStates[entry - BOSS_COLOSSUS_ZORA];
+    std::size_t const bossIndex = entry - BOSS_COLOSSUS_ZORA;
+    BossState& resultState = _bossStates[bossIndex];
     for (PendingBossKill const& pending : _pendingBossKills)
         if (pending.CampaignId == state.CampaignId && pending.Origin == state.Origin && pending.Entry == entry)
             return resultState = BossState::Defeated;
     if (resultState != BossState::Unknown)
         return resultState;
     auto const now = std::chrono::steady_clock::now();
-    if (now < _nextBossLoad)
+    if (now < _nextBossLoad[bossIndex])
         return BossState::Unknown; // Fail closed; no unverified boss spawn.
-    _nextBossLoad = now + RetryDelay;
+    _nextBossLoad[bossIndex] = now + RetryDelay;
     QueryResult result = CharacterDatabase.Query(
         "SELECT COUNT(*) FROM aq_war_effort_boss_kill "
         "WHERE campaign_id = {} AND war_started_at = {} AND boss_id = {}",
         state.CampaignId, state.Origin, entry);
     if (!result)
     {
-        if (!_bossLoadFailureLogged)
-            LOG_ERROR("module", "AQWarEffort: Cannot read named boss kills from character DB; boss spawning paused.");
-        _bossLoadFailureLogged = true;
+        if (!_bossLoadFailureLogged[bossIndex])
+            LOG_ERROR("module", "AQWarEffort: Cannot read named boss {} kills from character DB; spawning paused.", entry);
+        _bossLoadFailureLogged[bossIndex] = true;
         return BossState::Unknown;
     }
-    _bossLoadFailureLogged = false;
+    _bossLoadFailureLogged[bossIndex] = false;
     Field* fields = result->Fetch();
     return resultState = fields[0].Get<uint64>() ? BossState::Defeated : BossState::Alive;
 }
@@ -154,20 +132,33 @@ void WarContentController::OnOwnedBossDeath(Creature const* creature, WarContent
     std::lock_guard lock(_bossMutex);
     if (!_active)
         return;
-    // Only a GUID held by the current module-owned battlefront is eligible.
-    // Future fronts register their owned boss slots here, not by area or entry.
-    BattlefrontSlot const& slot = _ashi.Slots[std::size(AshiSpawns) - 1];
-    if (creature->GetEntry() != BOSS_COLOSSUS_ASHI
-        || !IsOwnedWarBossDeath(WarBossKey{ state.CampaignId, state.Origin, creature->GetEntry() },
-            WarBossKey{ _campaignId, _origin, BOSS_COLOSSUS_ASHI }, creature->GetGUID(),
-            slot.Guid, slot.Spawned, _ashi.Stage == 4))
+    // Match the current front's exact runtime slot and epoch, never entry/proximity alone.
+    uint32 const entry = creature->GetEntry();
+    bool owned = false;
+    for (std::size_t frontIndex = 0; frontIndex < WarBattlefronts.size(); ++frontIndex)
+    {
+        BattlefrontDefinition const& definition = WarBattlefronts[frontIndex];
+        Battlefront const& front = _battlefronts[frontIndex];
+        if (definition.BossEntry != entry)
+            continue;
+        for (std::size_t slotIndex = 0; slotIndex < definition.Spawns.size(); ++slotIndex)
+        {
+            BattlefrontSlot const& slot = front.Slots[slotIndex];
+            if (definition.Spawns[slotIndex].Entry == entry
+                && IsOwnedWarBossDeath(WarBossKey{ state.CampaignId, state.Origin, entry },
+                    WarBossKey{ _campaignId, _origin, definition.BossEntry }, creature->GetGUID(),
+                    slot.Guid, slot.Spawned, front.Stage == 4))
+                owned = true;
+        }
+    }
+    if (!owned)
         return;
-    BossState& boss = _bossStates[BOSS_COLOSSUS_ASHI - BOSS_COLOSSUS_ZORA];
+    BossState& boss = _bossStates[entry - BOSS_COLOSSUS_ZORA];
     if (boss == BossState::Defeated)
         return;
     boss = BossState::Defeated; // Suppress locally even if the DB is unavailable.
     std::time_t const now = std::time(nullptr);
-    _pendingBossKills.push_back({ state.CampaignId, state.Origin, BOSS_COLOSSUS_ASHI,
+    _pendingBossKills.push_back({ state.CampaignId, state.Origin, entry,
         now > 0 ? uint64(now) : state.Origin });
     _nextBossWrite = {};
     RetryBossKills();
@@ -177,9 +168,12 @@ void WarContentController::Cleanup()
 {
     // Do not load grids for cleanup, and never remove stock/quest objects by entry.
     Map* map = sMapMgr->FindMap(ContentMap, 0);
-    if (_ashi.Stage)
-        LOG_INFO("module", "AQWarEffort: Hive'Ashi battlefront cleaned up.");
-    CleanupAshi(map);
+    for (std::size_t i = 0; i < WarBattlefronts.size(); ++i)
+    {
+        if (_battlefronts[i].Stage)
+            LOG_INFO("module", "AQWarEffort: {} battlefront cleaned up.", WarBattlefronts[i].Name);
+        CleanupBattlefront(map, _battlefronts[i]);
+    }
     if (map)
         if (GameObject* crystal = map->GetGameObject(_crystal))
         {
@@ -194,9 +188,9 @@ void WarContentController::Cleanup()
     _nextAttempt = {};
 }
 
-void WarContentController::CleanupAshi(Map* map)
+void WarContentController::CleanupBattlefront(Map* map, Battlefront& front)
 {
-    for (BattlefrontSlot& slot : _ashi.Slots)
+    for (BattlefrontSlot& slot : front.Slots)
     {
         if (map && slot.Spawned)
             if (Creature* creature = map->GetCreature(slot.Guid))
@@ -206,38 +200,41 @@ void WarContentController::CleanupAshi(Map* map)
             }
         slot = {};
     }
-    _ashi = {};
+    front = {};
 }
 
-void WarContentController::ReconcileAshi(WarContentState const& state, Map* map)
+void WarContentController::ReconcileBattlefront(WarContentState const& state, Map* map,
+    Battlefront& front, BattlefrontDefinition const& frontDefinition)
 {
     uint8 const stage = BattlefrontStage(state.Elapsed, state.Duration);
-    if (_ashi.Stage != stage)
+    if (front.Stage != stage)
     {
-        uint8 const previous = _ashi.Stage;
-        CleanupAshi(map);
-        _ashi.Stage = stage;
-        LOG_INFO("module", "AQWarEffort: Hive'Ashi battlefront {} at stage {}.",
-            previous ? "advanced" : "activated", stage);
+        uint8 const previous = front.Stage;
+        CleanupBattlefront(map, front);
+        front.Stage = stage;
+        LOG_INFO("module", "AQWarEffort: {} battlefront {} at stage {}.",
+            frontDefinition.Name, previous ? "advanced" : "activated", stage);
     }
 
     auto const now = std::chrono::steady_clock::now();
-    if (now < _ashi.NextAttempt)
+    if (now < front.NextAttempt)
         return;
-    _ashi.NextAttempt = now + RetryDelay;
-    for (std::size_t i = 0; i < std::size(AshiSpawns); ++i)
+    front.NextAttempt = now + RetryDelay;
+    for (std::size_t i = 0; i < frontDefinition.Spawns.size(); ++i)
     {
-        SpawnDefinition const& definition = AshiSpawns[i];
-        BattlefrontSlot& slot = _ashi.Slots[i];
+        BattlefrontSpawn const& definition = frontDefinition.Spawns[i];
+        BattlefrontSlot& slot = front.Slots[i];
         if (definition.FirstStage > stage || slot.Spawned)
             continue;
-        if (definition.Entry == AshiColossus && GetBossState(state, AshiColossus) != BossState::Alive)
+        if (definition.Entry == frontDefinition.BossEntry
+            && GetBossState(state, frontDefinition.BossEntry) != BossState::Alive)
             continue;
         if (!sObjectMgr->GetCreatureTemplate(definition.Entry))
         {
-            if (!_ashi.FailureLogged)
-                LOG_ERROR("module", "AQWarEffort: Hive'Ashi requires stock creature templates 15421, 15758 and 15742.");
-            _ashi.FailureLogged = true;
+            if (!front.FailureLogged)
+                LOG_ERROR("module", "AQWarEffort: {} requires stock creature template {}.",
+                    frontDefinition.Name, definition.Entry);
+            front.FailureLogged = true;
             continue;
         }
         // Explicit GUID ownership; absence after a successful summon means
@@ -248,15 +245,16 @@ void WarContentController::ReconcileAshi(WarContentState const& state, Map* map)
             slot.Guid = creature->GetGUID();
             slot.Spawned = true;
             creature->setActive(true);
-            _ashi.FailureLogged = false;
-            if (definition.Entry == AshiColossus)
-                LOG_INFO("module", "AQWarEffort: Colossus of Ashi entered the battle.");
+            front.FailureLogged = false;
+            if (definition.Entry == frontDefinition.BossEntry)
+                LOG_INFO("module", "AQWarEffort: {} entered the battle.", frontDefinition.BossName);
         }
         else
         {
-            if (!_ashi.FailureLogged)
-                LOG_ERROR("module", "AQWarEffort: Could not summon Hive'Ashi battlefront; retrying active slots.");
-            _ashi.FailureLogged = true;
+            if (!front.FailureLogged)
+                LOG_ERROR("module", "AQWarEffort: Could not summon {} battlefront; retrying active slots.",
+                    frontDefinition.Name);
+            front.FailureLogged = true;
         }
     }
 }
@@ -288,7 +286,8 @@ void WarContentController::Reconcile(WarContentState const& state, bool startup)
     if (!map)
         map = sMapMgr->CreateBaseMap(ContentMap);
     if (map)
-        ReconcileAshi(state, map);
+        for (std::size_t i = 0; i < WarBattlefronts.size(); ++i)
+            ReconcileBattlefront(state, map, _battlefronts[i], WarBattlefronts[i]);
     if (map && map->GetGameObject(_crystal))
         return; // Exactly one owned formation, regardless of reconciliation frequency.
     _crystal.Clear(); // A grid unload/manual removal cannot leave a dangling pointer.

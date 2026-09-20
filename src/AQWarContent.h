@@ -7,6 +7,7 @@
 
 #include "AQWarEffort.h"
 #include "AQNamedWarBoss.h"
+#include "AQBattlefrontData.h"
 #include "ObjectGuid.h"
 #include <array>
 #include <chrono>
@@ -59,8 +60,10 @@ namespace AQWarEffort
         WarContentController(WarContentController const&) = delete;
         WarContentController& operator=(WarContentController const&) = delete;
         void Cleanup();
-        void ReconcileAshi(WarContentState const& state, Map* map);
-        void CleanupAshi(Map* map);
+        struct Battlefront;
+        void ReconcileBattlefront(WarContentState const& state, Map* map,
+            Battlefront& front, BattlefrontDefinition const& definition);
+        void CleanupBattlefront(Map* map, Battlefront& front);
         enum class BossState : uint8 { Unknown, Alive, Defeated };
         BossState GetBossState(WarContentState const& state, uint32 entry);
         void RetryBossKills();
@@ -80,19 +83,19 @@ namespace AQWarEffort
         struct Battlefront
         {
             uint8 Stage{ 0 };
-            std::array<BattlefrontSlot, 8> Slots{};
+            std::array<BattlefrontSlot, BattlefrontSlotCount> Slots{};
             std::chrono::steady_clock::time_point NextAttempt{};
             bool FailureLogged{ false };
         };
-        Battlefront _ashi;
+        std::array<Battlefront, BattlefrontCount> _battlefronts;
         std::mutex _bossMutex;
         uint32 _bossCampaignId{ 0 };
         uint64 _bossOrigin{ 0 };
         std::array<BossState, 3> _bossStates{};
         std::vector<PendingBossKill> _pendingBossKills;
-        std::chrono::steady_clock::time_point _nextBossLoad{};
+        std::array<std::chrono::steady_clock::time_point, 3> _nextBossLoad{};
         std::chrono::steady_clock::time_point _nextBossWrite{};
-        bool _bossLoadFailureLogged{ false };
+        std::array<bool, 3> _bossLoadFailureLogged{};
         bool _bossWriteFailureLogged{ false };
         ObjectGuid _crystal;
         uint32 _campaignId{ 0 };

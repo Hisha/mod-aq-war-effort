@@ -16,7 +16,9 @@ The restart-safe war duration now advances TEN_HOUR_WAR to OPEN; see
 A separate content controller now reconciles one temporary stock red crystal
 outside the wall during an active war; see
 [content inventory, lifecycle and live tests](docs/TEN_HOUR_WAR_CONTENT.md).
-This proof requires no additional SQL and adds no battles or rewards.
+Hive'Ashi and Hive'Regal now share a four-stage runtime battlefront controller;
+see [Regal inventory, implementation and live tests](docs/HIVE_REGAL_BATTLEFRONT.md).
+Both use the existing durable named-boss table; this milestone adds no SQL or rewards.
 
 ## Installation
 
@@ -27,6 +29,7 @@ This proof requires no additional SQL and adds no battles or rewards.
    databases (or use the core's configured module SQL updater):
    - Characters: `data/sql/db-characters/base/001_aq_war_effort.sql`
    - Characters: `data/sql/db-characters/base/002_aq_scarab_gong.sql` (existing installs too)
+   - Characters: `data/sql/db-characters/base/003_aq_named_war_boss_kills.sql` (named bosses)
    - World: `data/sql/db-world/base/001_aq_war_effort_quartermasters.sql`
    - World: `data/sql/db-world/base/002_aq_scarab_wall.sql` (also apply to existing installs)
    - World: `data/sql/db-world/base/003_aq_scarab_gong.sql` (existing installs too)

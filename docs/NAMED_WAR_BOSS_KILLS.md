@@ -6,9 +6,9 @@ The reference `mod-war-effort/warevent.sql` identifies Colossus of Zora as
 15740, Regal as 15741, and Ashi as 15742, with distinct historical Silithus
 spawns. The module's earlier AzerothCore stock audit identifies 15742 as the
 stock Ashi template with SmartAI. The upstream AzerothCore death hook and map
-summon APIs were inspected for this change. The user's AzerothCore checkout
-and database are on an inaccessible server; confirm the three names and any
-local overrides against the deployment DB:
+summon APIs were inspected for this change. The subsequent Regal milestone verified both Ashi and Regal against the local
+AzerothCore checkout; see [its build and test report](HIVE_REGAL_BATTLEFRONT.md).
+The deployment database remains remote; confirm local overrides there:
 
 ```sql
 SELECT entry, name, AIName, ScriptName, LootId
@@ -26,38 +26,38 @@ for an accepted gong war, otherwise the current administrative war's
 later admin war. A new war origin gets a fresh boss state; no old rows are
 deleted or rewritten.
 
-Fresh installs apply `base/003_aq_named_war_boss_kills.sql`; existing installs
-apply `updates/2026_09_18_00_named_war_boss_kills.sql` with worldserver stopped.
-Both scripts use the same `CREATE TABLE IF NOT EXISTS`, are rerunnable, and do
+The existing `base/003_aq_named_war_boss_kills.sql` uses
+`CREATE TABLE IF NOT EXISTS` and is rerunnable. Apply it with worldserver stopped
+if the table is not already installed. The Regal milestone needs no SQL. It does
 not touch campaign, supply or gong rows. The runtime uses an idempotent insert
 and reads the exact key back because `DirectExecute` reports no write status.
 
 ## Runtime and failure behavior
 
-Only the controller's stage-4 Ashi summon GUID is eligible for recording. The
+Only the controller's stage-4 Ashi and Regal summon GUIDs are eligible for recording. The
 global unit-death hook checks that GUID, entry, active phase, campaign and war
 origin. It does not change the boss's stock AI or loot. Ordinary Drones and
-Warbringers retain their existing stage-local death behavior. Regal and Zora
-are recognized as named boss IDs by the shared tracking API, but have no
-battlefronts or summons here.
+Warbringers retain their existing stage-local death behavior. Regal now has its own battlefront and uses boss_id 15741 independently of Ashi
+15742. Zora is recognized by the shared identity API but has no battlefront or
+summons. The Regal guide includes the full two-boss live-test matrix.
 
-Before creating Ashi, the controller reads the exact campaign/epoch/boss key.
+Before creating either named boss, the controller reads the exact campaign/epoch/boss key.
 A recorded kill suppresses it. A failed read is treated as unknown and **does
 not spawn the boss**; it retries after five seconds. On an owned death, the
 controller immediately marks the in-memory boss state defeated, performs an
 idempotent synchronous character-DB insert, then verifies the row by read-back.
-If verification fails, it logs an error, keeps Ashi suppressed in this process,
+If verification fails, it logs an error, keeps that boss suppressed in this process,
 and retries the write every five seconds, even if the war ends. It never logs a
 failed write as durable. A process crash while the DB is still unavailable can
 lose that unconfirmed death; the error message calls out that unavoidable
 failure window. Once the DB recovers, the pending write is retained under the
 original campaign and epoch, so it cannot affect a newer war. Reconciliation
-and restart after a confirmed write keep Ashi absent.
+and restart after a confirmed write keep that boss absent.
 
 ## Exact live test
 
 Use a disposable campaign ID and `AQWarEffort.TenHourWar.Duration = 300`.
-Apply the character update first, rebuild, and restart worldserver.
+Ensure the existing character base/003 table is installed, rebuild, and restart worldserver.
 
 1. Check the three stock names with the SQL query above. In READY, query the
    character DB: `SELECT * FROM aq_war_effort_boss_kill WHERE campaign_id = <id>;`.
@@ -97,8 +97,8 @@ Apply the character update first, rebuild, and restart worldserver.
 
 ## Validation performed in packaging workspace
 
-The source module and legacy SQL were inspected. The standalone named-boss
-identity/ownership test and existing stage test pass locally. The server's
-AzerothCore checkout, build tree, and character DB are inaccessible here, so
-module compilation and the live/SQL scenarios above remain deployment checks.
-The ZIP does not include core modifications.
+The Regal milestone compiled all module translation units against the actual local
+AzerothCore checkout. Shared controller tests, the two-boss restart/death matrix,
+existing campaign/contribution/gong/wall/timer regressions and isolated MySQL tests
+passed. This is not a full worldserver link or a live realm test. See the
+[Regal report](HIVE_REGAL_BATTLEFRONT.md) for exact scope and commands.
