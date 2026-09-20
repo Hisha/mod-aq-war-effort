@@ -34,12 +34,13 @@ and reads the exact key back because `DirectExecute` reports no write status.
 
 ## Runtime and failure behavior
 
-Only the controller's stage-4 Ashi and Regal summon GUIDs are eligible for recording. The
+Only the controller's stage-4 Ashi, Regal and Zora summon GUIDs are eligible for recording. The
 global unit-death hook checks that GUID, entry, active phase, campaign and war
 origin. It does not change the boss's stock AI or loot. Ordinary Drones and
 Warbringers retain their existing stage-local death behavior. Regal now has its own battlefront and uses boss_id 15741 independently of Ashi
-15742. Zora is recognized by the shared identity API but has no battlefront or
-summons. The Regal guide includes the full two-boss live-test matrix.
+15742. Zora now has its own battlefront with boss_id 15740. The
+[Zora guide](HIVE_ZORA_BATTLEFRONT.md) includes all eight independent three-boss
+defeat/restart combinations; the table and persistence mechanism are unchanged.
 
 Before creating either named boss, the controller reads the exact campaign/epoch/boss key.
 A recorded kill suppresses it. A failed read is treated as unknown and **does

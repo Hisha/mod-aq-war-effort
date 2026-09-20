@@ -2,7 +2,7 @@
  * Copyright (C) 2026 Kevin Smith
  * SPDX-License-Identifier: AGPL-3.0-or-later
  * Locations reference AzerothCore mod-war-effort warevent.sql.
- * Regal composition also references current stock Silithus creature templates.
+ * Regal and Zora composition also references current stock Silithus creature templates.
  */
 #include "AQBattlefrontData.h"
 #include "AQNamedWarBoss.h"
@@ -42,6 +42,23 @@ namespace
         // Exact historical Regal Colossus emergence (legacy GUID 311616).
         { BOSS_COLOSSUS_REGAL, { -7922.958008f, 625.548523f, -29.006325f, 0.844522f }, 4 }
     };
+    constexpr uint32 ZoraWasp = 11727;
+    constexpr uint32 ZoraWaywatcher = 11725;
+    constexpr uint32 ZoraReaver = 11728;
+    constexpr uint32 ZoraHiveSister = 11729;
+    BattlefrontSpawn const ZoraSpawns[] =
+    {
+        // Exact reference Zora path 157400 points 1-5, used as stationary
+        // emergence slots. Stock combat movement/AI remain unchanged.
+        { ZoraWasp, { -7418.407227f, 1649.863770f, -32.103611f, 1.029089f }, 1 },
+        { ZoraWasp, { -7409.972656f, 1705.264404f, -36.461433f, 1.437496f }, 1 },
+        { ZoraWaywatcher, { -7352.450684f, 1710.901733f, -38.267399f, 5.460305f }, 2 },
+        { ZoraReaver, { -7329.275391f, 1640.641968f, -32.322731f, 5.153214f }, 2 },
+        { ZoraHiveSister, { -7299.695801f, 1599.568481f, -30.213583f, 5.754819f }, 3 },
+        // Exact historical Colossus of Zora emergence (legacy creature GUID 311617).
+        { BOSS_COLOSSUS_ZORA, { -7461.777832f, 1611.004272f, -48.327751f, 0.616755f }, 4 }
+    };
+    static_assert(std::size(ZoraSpawns) <= BattlefrontSlotCount);
     static_assert(std::size(AshiSpawns) <= BattlefrontSlotCount);
     static_assert(std::size(RegalSpawns) <= BattlefrontSlotCount);
 }
@@ -49,6 +66,7 @@ namespace
 std::array<BattlefrontDefinition, BattlefrontCount> const WarBattlefronts =
 {{
     { "Hive'Ashi", "Colossus of Ashi", BOSS_COLOSSUS_ASHI, AshiSpawns },
-    { "Hive'Regal", "Colossus of Regal", BOSS_COLOSSUS_REGAL, RegalSpawns }
+    { "Hive'Regal", "Colossus of Regal", BOSS_COLOSSUS_REGAL, RegalSpawns },
+    { "Hive'Zora", "Colossus of Zora", BOSS_COLOSSUS_ZORA, ZoraSpawns }
 }};
 }

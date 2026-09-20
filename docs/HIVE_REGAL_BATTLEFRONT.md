@@ -1,5 +1,9 @@
 # Hive'Regal battlefront
 
+The subsequent [Hive'Zora milestone](HIVE_ZORA_BATTLEFRONT.md) adds the third
+front through the same data definitions; Ashi and Regal are unchanged. Counts
+and scope below describe this earlier two-front milestone.
+
 Hive'Regal and Hive'Ashi now run through one `WarContentController`, using the
 same persisted campaign clock and four normalized stages. This milestone adds
 six Regal runtime slots, at most six active actors per front. It adds no SQL,

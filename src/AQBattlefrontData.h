@@ -12,7 +12,7 @@
 
 namespace AQWarEffort
 {
-    constexpr std::size_t BattlefrontCount = 2;
+    constexpr std::size_t BattlefrontCount = 3;
     constexpr std::size_t BattlefrontSlotCount = 8;
 
     struct BattlefrontSpawn

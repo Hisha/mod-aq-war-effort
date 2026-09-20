@@ -16,9 +16,10 @@ The restart-safe war duration now advances TEN_HOUR_WAR to OPEN; see
 A separate content controller now reconciles one temporary stock red crystal
 outside the wall during an active war; see
 [content inventory, lifecycle and live tests](docs/TEN_HOUR_WAR_CONTENT.md).
-Hive'Ashi and Hive'Regal now share a four-stage runtime battlefront controller;
-see [Regal inventory, implementation and live tests](docs/HIVE_REGAL_BATTLEFRONT.md).
-Both use the existing durable named-boss table; this milestone adds no SQL or rewards.
+Hive'Ashi, Hive'Regal and Hive'Zora share a four-stage runtime battlefront controller;
+see [Zora inventory, implementation and live tests](docs/HIVE_ZORA_BATTLEFRONT.md).
+All three use the existing durable named-boss table, with at most 18 active
+battlefront creatures. The Zora milestone adds no SQL or rewards.
 
 ## Installation
 

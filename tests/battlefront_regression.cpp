@@ -52,7 +52,7 @@ int main()
         controller->OnOwnedBossDeath(actor, state);
         TestMap.Creatures.erase(guid);
     };
-    assert(WarBattlefronts.size() == 2 && WarBattlefronts[0].BossEntry == 15742 && WarBattlefronts[1].BossEntry == 15741);
+    assert(WarBattlefronts.size() == 3 && WarBattlefronts[0].BossEntry == 15742 && WarBattlefronts[1].BossEntry == 15741);
     // Golden Ashi roster: preserve every entry, coordinate, orientation, first stage.
     uint32 const entries[] = {15421,15421,15421,15758,15758,15742};
     Position const places[] = {{-6497.20f,1021.79f,0.38f,4.00f}, {-6540.54f,985.64f,0.38f,3.59f},
@@ -78,7 +78,7 @@ int main()
             assert(alive(0) == expected && alive(1) == expected);
             assert(TestMap.Count(15741) == (stage == 4 ? 1u : 0u));
             assert(TestMap.Count(15742) == (stage == 4 ? 1u : 0u));
-            assert(TestMap.Count(15740) == 0);
+            assert(TestMap.Count(15740) == (stage == 4 ? 1u : 0u));
             assert(TestMap.Objects.size() == 1);
             auto created = TestMap.CreatureCreates, reads = CharacterDatabase.Reads, logs = InfoLogs;
             for (unsigned i = 0; i < 100; ++i) { retries(); reconcile(state); }
@@ -172,12 +172,149 @@ int main()
     reconcile(state); inactive=state; inactive.Managed=false; reconcile(inactive);
     assert(TestMap.Creatures.empty() && TestMap.Objects.empty());
 
+
+    // Zora extends the existing data; Regal and Ashi stay byte-for-byte in the source audit.
+    uint32 const regalEntries[] = {11732,11732,11733,11734,15758,15741};
+    Position const regalPlaces[] = {{-7870.958496f,687.510498f,-27.781849f,0.293172f},
+        {-7791.520996f,727.871521f,-37.473316f,0.432190f},
+        {-7720.165039f,719.385498f,-41.306274f,5.582830f},
+        {-7637.914551f,609.112854f,-51.588173f,5.230968f},
+        {-7831.444336f,808.078979f,-9.832852f,4.501119f},
+        {-7922.958008f,625.548523f,-29.006325f,0.844522f}};
+    uint32 const zoraEntries[] = {11727,11727,11725,11728,11729,15740};
+    assert(WarBattlefronts[2].BossEntry == 15740);
+    for (std::size_t i = 0; i < 6; ++i)
+    {
+        auto const& row = WarBattlefronts[1].Spawns[i];
+        assert(row.Entry == regalEntries[i] && row.FirstStage == first[i]);
+        assert(row.Location.x == regalPlaces[i].x && row.Location.y == regalPlaces[i].y);
+        assert(row.Location.z == regalPlaces[i].z && row.Location.o == regalPlaces[i].o);
+        assert(WarBattlefronts[2].Spawns[i].Entry == zoraEntries[i]);
+        assert(WarBattlefronts[2].Spawns[i].FirstStage == first[i]);
+    }
+    CharacterDatabase.Kills.clear();
+    for (uint32 duration : {300u, 36000u})
+    {
+        restart();
+        for (uint8 stage = 1; stage <= 4; ++stage)
+        {
+            state = War(duration * (stage - 1) / 4, duration);
+            reconcile(state);
+            unsigned expected = stage == 1 ? 2 : stage == 2 ? 4 : stage == 3 ? 5 : 6;
+            std::set<uint64> unique;
+            for (std::size_t front = 0; front < 3; ++front)
+            {
+                assert(controller->_battlefronts[front].Stage == stage && alive(front) == expected);
+                assert(bool(boss(front)) == (stage == 4));
+                for (auto guid : frontGuids(front)) assert(unique.insert(guid).second);
+            }
+            assert(TestMap.Creatures.size() == 3 * expected && TestMap.Creatures.size() <= 18);
+            auto created = TestMap.CreatureCreates;
+            for (unsigned tick = 0; tick < 100; ++tick) { retries(); reconcile(state); }
+            assert(TestMap.CreatureCreates == created);
+            // Kill each front's ordinary slot without disturbing either peer.
+            for (std::size_t front = 0; front < 3; ++front)
+            {
+                std::array<std::vector<uint64>, 3> before = {frontGuids(0),frontGuids(1),frontGuids(2)};
+                kill(TestMap.GetCreature({frontGuids(front)[0]}), state); retries(); reconcile(state);
+                assert(alive(front) == expected - 1);
+                for (std::size_t peer = 0; peer < 3; ++peer) assert(frontGuids(peer) == before[peer]);
+            }
+            assert(CharacterDatabase.Kills.empty());
+            // Restart directly into each current stage, including before the next boundary.
+            restart(); reconcile(state);
+            for (std::size_t front = 0; front < 3; ++front) assert(alive(front) == expected);
+            state.Elapsed = duration * stage / 4 - 1; state.Remaining = duration - state.Elapsed;
+            retries(); reconcile(state);
+            for (auto const& front : controller->_battlefronts) assert(front.Stage == stage);
+        }
+    }
+    for (unsigned mask = 0; mask < 8; ++mask)
+    {
+        CharacterDatabase.Kills.clear(); restart(); state = War(240,300,900000 + mask);
+        reconcile(state);
+        for (std::size_t front = 0; front < 3; ++front)
+            if (mask & (1u << front))
+            {
+                Creature copy = *boss(front);
+                kill(boss(front),state);
+                auto rows = CharacterDatabase.Kills;
+                controller->OnOwnedBossDeath(&copy,state);
+                assert(CharacterDatabase.Kills == rows);
+                assert(rows.contains({state.CampaignId,state.Origin,WarBattlefronts[front].BossEntry}));
+            }
+        retries(); reconcile(state);
+        for (std::size_t front = 0; front < 3; ++front) assert(bool(boss(front)) == !(mask & (1u << front)));
+        restart(); controller->Reconcile(state,true); TestMap.Flush();
+        for (std::size_t front = 0; front < 3; ++front)
+        {
+            assert(bool(boss(front)) == !(mask & (1u << front)));
+            assert(alive(front) == ((mask & (1u << front)) ? 5u : 6u));
+        }
+        auto rows = CharacterDatabase.Kills;
+        ++state.Origin; reconcile(state);
+        assert(boss(0) && boss(1) && boss(2) && CharacterDatabase.Kills == rows);
+    }
+    CharacterDatabase.Kills.clear(); restart(); state = War(180); reconcile(state);
+    assert(alive(0) == 5 && alive(1) == 5 && alive(2) == 5); // 60%: all stage 3.
+    auto peers = std::array{frontGuids(0),frontGuids(1)};
+    controller->CleanupBattlefront(&TestMap,controller->_battlefronts[2]); TestMap.Flush();
+    assert(alive(2) == 0 && frontGuids(0) == peers[0] && frontGuids(1) == peers[1]);
+    reconcile(state); assert(alive(2) == 5 && frontGuids(0) == peers[0] && frontGuids(1) == peers[1]);
+    restart(); ObjectManager.Missing.insert(11729); reconcile(state);
+    assert(alive(0) == 5 && alive(1) == 5 && alive(2) == 4);
+    peers = {frontGuids(0),frontGuids(1)};
+    ObjectManager.Missing.clear(); retries(); reconcile(state);
+    assert(alive(2) == 5 && frontGuids(0) == peers[0] && frontGuids(1) == peers[1]);
+    restart(); state = War(240); CharacterDatabase.FailRead.insert(15740); reconcile(state);
+    assert(boss(0) && boss(1) && !boss(2));
+    CharacterDatabase.FailRead.clear(); retries(); reconcile(state); assert(boss(2));
+    Creature wrong = *boss(2); ++wrong.Guid.Value;
+    controller->OnOwnedBossDeath(&wrong,state);
+    controller->OnOwnedBossDeath(boss(2),War(240,300,state.Origin+1));
+    controller->OnOwnedBossDeath(boss(2),War(240,300,state.Origin,state.CampaignId+1));
+    assert(CharacterDatabase.Kills.empty());
+    CharacterDatabase.FailWrite.insert(15740); kill(boss(2),state); retries(); reconcile(state);
+    assert(!boss(2) && boss(0) && boss(1) && CharacterDatabase.Kills.empty());
+    CharacterDatabase.FailWrite.clear(); retries(); reconcile(state);
+    assert(CharacterDatabase.Kills.contains({state.CampaignId,state.Origin,15740}));
+    restart(); reconcile(state); assert(!boss(2) && boss(0) && boss(1));
+    ++state.Origin; reconcile(state); assert(boss(2));
+    std::thread firstDeath([&] { controller->OnOwnedBossDeath(boss(0),state); });
+    std::thread secondDeath([&] { controller->OnOwnedBossDeath(boss(1),state); });
+    std::thread thirdDeath([&] { controller->OnOwnedBossDeath(boss(2),state); });
+    firstDeath.join(); secondDeath.join(); thirdDeath.join();
+    for (uint32 entry : {15740u,15741u,15742u})
+        assert(CharacterDatabase.Kills.contains({state.CampaignId,state.Origin,entry}));
+    // All fronts disappear on every non-war phase; unrelated same-entry creatures survive.
+    restart(); ++state.Origin;
+    auto& stock = TestMap.Creatures[900000]; stock.Entry = 15740; stock.Guid.Value = 900000;
+    for (auto phase : {AQ_PHASE_OPEN,AQ_PHASE_READY,AQ_PHASE_WAR_EFFORT,AQ_PHASE_DISABLED})
+    {
+        reconcile(state); assert(alive(0) == 6 && alive(1) == 6 && alive(2) == 6);
+        inactive = state; inactive.Phase = phase; reconcile(inactive);
+        assert(TestMap.Creatures.size() == 1 && TestMap.Creatures.contains(900000));
+        assert(TestMap.Objects.empty());
+    }
+    restart(); inactive = state; inactive.Phase = AQ_PHASE_OPEN;
+    controller->Reconcile(inactive,true); assert(TestMap.Creatures.empty() && TestMap.Objects.empty());
+    for (unsigned condition = 0; condition < 3; ++condition)
+    {
+        reconcile(state); inactive = state;
+        if (condition == 0) inactive.Managed = false;
+        if (condition == 1) inactive.TimingValid = false;
+        if (condition == 2) inactive.Remaining = 0;
+        reconcile(inactive); assert(TestMap.Creatures.empty() && TestMap.Objects.empty());
+    }
+
     // Exercise the actual registered unit-death observer, too.
     CharacterDatabase.Kills.clear(); TestState=War(225,300,800000);
     auto& singleton=WarContentController::Instance(); singleton.Reconcile(TestState);
     Creature* regalBoss = nullptr;
     for (auto& [guid, actor] : TestMap.Creatures) if(actor.Entry==15741) regalBoss=&actor;
     assert(regalBoss); aq_named_war_boss_death hook; hook.OnUnitDeath(regalBoss,nullptr);
+    for (auto& [guid, actor] : TestMap.Creatures) if (actor.Entry == 15740) hook.OnUnitDeath(&actor,nullptr);
+    assert(CharacterDatabase.Kills.contains({7,800000,15740}));
     assert(CharacterDatabase.Kills.contains({7,800000,15741}));
     TestState.Phase=AQ_PHASE_OPEN; singleton.Reconcile(TestState); TestMap.Flush();
     assert(TestMap.Creatures.empty() && TestMap.Objects.empty());

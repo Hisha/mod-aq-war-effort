@@ -21,4 +21,4 @@ with TemporaryDirectory(prefix='aq-battlefronts-') as directory:
         subprocess.run(['c++', '-std=c++20', '-I'+str(root/'src'), str(root/('tests/'+name+'.cpp')), '-o', str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
         print('PASS:', name)
-print('PASS: actual shared controller, both rosters, ownership, stages, boss persistence/failure/restart matrix and crystal')
+print('PASS: actual shared controller, all three rosters, ownership, stages, boss persistence/failure/restart matrix and crystal')
